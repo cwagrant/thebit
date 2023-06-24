@@ -36,17 +36,39 @@ obs.on("Identified", () => {
     }
   }, 1000);
 
+  const clamp = (number) => {
+    if (number < 0.1) {
+      return 0.1;
+    } else if (number > 10) {
+      return 10;
+    }
+  };
+
+  // We need to get startX and startY from the OBS Websocket API
+  const startX = 100;
+  const startY = 100;
+
+  // We need to get the startWidth and startHeight from the OBS Websocket API
+  const startWidth = 1920;
+  const startHeight = 1080;
+
+  let currentWidth = 1920;
+  let currentHeight = 1080;
+
   socket.on("donation:save", (data) => {
     const { amount: donationCents } = data;
 
-    // this seems to work and makes it so that larger amounts
-    // make larger change and smaller amounts make smaller changes
     const adjustSign = (donationCents % 2) ? 1 : -1;
     const baseDelta = donationCents / 99900;
     const newSize = currentSize + (baseDelta * activityDelta * adjustSign);
 
-    currentSize = newSize < 0 ? 0 : newSize;
+    currentSize = newSize < 0.1 ? 0 : newSize;
+    currentWidth = startWidth * currentSize;
+    currentHeight = startHeight * currentSize;
     activityDelta *= 0.95;
+
+    const posX = startX + ((startWidth - currentWidth) / 2);
+    const posY = startY + ((startHeight - currentHeight) / 2);
 
     console.log({
       currentSize: currentSize,
@@ -62,9 +84,12 @@ obs.on("Identified", () => {
       sourceName: "Test",
       filterName: "MinishResize",
       filterSettings: {
+        pos: { x: posX, y: posY },
         scale: { x: currentSize, y: currentSize },
       },
     });
+
+    //
 
     obs.call("TriggerHotkeyByName", {
       hotkeyName: "MinishResize",
