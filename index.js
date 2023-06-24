@@ -1,6 +1,7 @@
 const { default: OBSWebSocket } = require("obs-websocket-js");
 const obs = new OBSWebSocket();
 const io = require("socket.io-client");
+require("dotenv").config();
 
 const socket = io("http://localhost:8080");
 
@@ -23,6 +24,9 @@ obs.on("Identified", () => {
   //   },
   // );
 
+  // if it crashes and you restart it the below values
+  // will be wrong. We probalby need to set them to hard
+  // values given to us from the OBS crew.
   let startX = 0;
   let startY = 0;
   let startWidth = 0;
@@ -31,14 +35,14 @@ obs.on("Identified", () => {
   let currentHeight = 1080;
 
   obs.call("GetSceneItemId", {
-    sceneName: "Test",
-    sourceName: "Color Source",
+    sceneName: process.env.SCENE_NAME,
+    sourceName: process.env.SOURCE_NAME,
   }).then((data) => {
     obs.call("GetSceneItemTransform", {
-      sceneName: "Test",
+      sceneName: process.env.SCENE_NAME,
       sceneItemId: data.sceneItemId,
     }).then((data) => {
-      // console.log(data)
+      // console.log(data);
       startX = data.sceneItemTransform.positionX;
       startY = data.sceneItemTransform.positionY;
 
@@ -46,7 +50,7 @@ obs.on("Identified", () => {
       startHeight = data.sceneItemTransform.sourceHeight;
       currentWidth = startWidth;
       currentHeight = startHeight;
-    })
+    });
   });
 
   let activityDelta = 1.00;
@@ -93,8 +97,8 @@ obs.on("Identified", () => {
     });
 
     obs.call("SetSourceFilterSettings", {
-      sourceName: "Test",
-      filterName: "MinishResize",
+      sourceName: process.env.SCENE_NAME,
+      filterName: process.env.FILTER_NAME,
       filterSettings: {
         pos: { x: posX, y: posY },
         scale: { x: currentSize, y: currentSize },
@@ -102,7 +106,7 @@ obs.on("Identified", () => {
     });
 
     obs.call("TriggerHotkeyByName", {
-      hotkeyName: "MinishResize",
+      hotkeyName: process.env.HOTKEY_NAME,
     }).then().catch((e) => console.log(e));
 
     // update the transition to increase or decrease based on amount
@@ -128,7 +132,10 @@ obs.on("SwitchScenes", (data) => {
   console.log("SwitchScenes", data);
 });
 
-obs.connect("ws://172.17.128.1:4455", "Bo8Ho959mwoFDVEF").then((info) => {
+obs.connect(
+  `ws://${process.env.OBS_WEBSOCKET_ADDRESS}`,
+  process.env.OBS_WEBSOCKET_PASSWORD,
+).then((info) => {
   console.log("Connected and identified", info);
 }, () => {
   console.error("Error Connecting");
