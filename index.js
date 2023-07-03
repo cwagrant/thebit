@@ -28,7 +28,8 @@ let currentWidth = 1920;
 let currentHeight = 1080;
 let currentScale = 1.0;
 let activityDelta = 1.00;
-
+let minimumSize = parseFloat(process.env.MINIMUM_SIZE);
+let maximumSize = parseFloat(process.env.MAXIMUM_SIZE);
 /* Some very simple GET requests we can make
  * to the server for controlling the resizer.
  */
@@ -52,6 +53,9 @@ app.get("/reset", (req, res) => {
       scaleY: 1,
     },
   }).then(() => {
+    currentScale = 1;
+    currentWidth = 1920;
+    currentHeight = 1080;
     return res.json({ message: "Success" });
   });
 });
@@ -68,8 +72,36 @@ app.get("/stop", (req, res) => {
       scaleY: 1,
     },
   }).then(() => {
+    currentScale = 1;
+    currentWidth = 1920;
+    currentHeight = 1080;
     return res.json({ message: "Success" });
   });
+});
+
+app.get("/max", (req, res) => {
+  try {
+    maximumSize = parseFloat(req.query.amount);
+
+    return res.json({ message: "Success" });
+  } catch (error) {
+    return res.json({
+      message: "Failed",
+      reason: error,
+    });
+  }
+});
+
+app.get("/min", (req, res) => {
+  try {
+    minimumSize = parseFloat(req.query.amount);
+    return res.json({ message: "Success" });
+  } catch {
+    return res.json({
+      message: "Failed",
+      reason: "Unable to parse amount to float. Returning to default.",
+    });
+  }
 });
 
 // To be clear, when paused we are not keeping any information about
@@ -97,6 +129,7 @@ obs.call("GetSceneItemTransform", {
   console.log("Current Transform", data.sceneItemTransform);
   currentWidth = data.sceneItemTransform.sourceWidth;
   currentHeight = data.sceneItemTransform.sourceHeight;
+  currentScale = data.sceneItemTransform.scaleX;
 });
 
 setInterval(() => {
@@ -106,10 +139,10 @@ setInterval(() => {
 }, 1000);
 
 const clamp = (number) => {
-  if (number < 0.1) {
-    return 0.1;
-  } else if (number > 10) {
-    return 10;
+  if (number < minimumSize) {
+    return minimumSize;
+  } else if (number > maximumSize) {
+    return maximumSize;
   }
   return number;
 };
