@@ -132,11 +132,17 @@ obs.call("GetSceneItemTransform", {
   currentScale = data.sceneItemTransform.scaleX;
 });
 
+// we may need to tweak this in the future but as it stands, based on the fastest
+// opening speed possible, doing this every 1 second means we never really move
+// the activity delta enough for it not to be 1 by the next time a donation is
+// shown. Currently we're doing it every 3 seconds instead which appears to be
+// just about slow enough so the activity delta continues to decrease during
+// rapid fire donations but will increase during downtimes.
 setInterval(() => {
   if (activityDelta < 1) {
     activityDelta += 0.01;
   }
-}, 1000);
+}, 3000);
 
 const clamp = (number) => {
   if (number < minimumSize) {
