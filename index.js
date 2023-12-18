@@ -4,7 +4,7 @@ import obs_ws from "./obs.js";
 import socket_io from "./socketio.js";
 import express from "express";
 import http from "http";
-import ObsTransformer from "./obs_transformer.js"
+import ObsTransformer from "./obs_transformer.js";
 
 const socket = await socket_io();
 const obs = await obs_ws();
@@ -93,7 +93,6 @@ app.get("/activityreset", (req, res) => {
   return res.json({ message: "Activity Delta set to 1.00" });
 });
 
-
 app.get("/donate", (req, res) => {
   const { amount } = req.query;
   const transform = obsTransformer.transform(amount);
@@ -103,37 +102,37 @@ app.get("/donate", (req, res) => {
 });
 
 app.get("/addTransform", (req, res) => {
-  const {amount, x, y, scale} = req.query;
-  try{
+  const { amount, x, y, scale } = req.query;
+  try {
     obsTransformer.addLookupScale(amount, parseFloat(scale));
     return res.json({
-      message: "Added New Transform", 
-      transforms: obsTransformer.tlookup
+      message: "Added New Transform",
+      transforms: obsTransformer.tlookup,
     });
   } catch {
     return res.json({
-      message: 'Failed to add transform',
-      transforms: obsTransformer.tlookup
-    })
+      message: "Failed to add transform",
+      transforms: obsTransformer.tlookup,
+    });
   }
 });
 
 app.get("/removeTransform", (req, res) => {
   const amount = req.query.amount;
 
-  try{
+  try {
     obsTransformer.removeLookupScale(amount);
     return res.json({
-      message: 'Removed Transform',
-      transforms: obsTransformer.tlookup
-    })
+      message: "Removed Transform",
+      transforms: obsTransformer.tlookup,
+    });
   } catch {
     return res.json({
-      message: 'Failed to Remove Transform',
-      transforms: obsTransformer.tlookup
-    })
+      message: "Failed to Remove Transform",
+      transforms: obsTransformer.tlookup,
+    });
   }
-})
+});
 
 obs.call("GetSceneItemTransform", {
   sceneName: process.env.SCENE_NAME,
@@ -143,8 +142,14 @@ obs.call("GetSceneItemTransform", {
   const width = data.sceneItemTransform.sourceWidth;
   const height = data.sceneItemTransform.sourceHeight;
   const scale = data.sceneItemTransform.scaleX;
+  const crop = {
+    bottom: data.sceneItemTransform.cropBottom,
+    left: data.sceneItemTransform.cropLeft,
+    right: data.sceneItemTransform.cropRight,
+    top: data.sceneItemTransform.cropTop,
+  };
 
-  obsTransformer = new ObsTransformer(width, height, scale)
+  obsTransformer = new ObsTransformer(width, height, scale, crop);
 });
 
 // we may need to tweak this in the future but as it stands, based on the fastest
@@ -158,35 +163,39 @@ const setSourceFilterSettings = (settings) => {
   obs.call("SetSourceFilterSettings", {
     sourceName: process.env.SCENE_NAME,
     filterName: process.env.FILTER_NAME,
-    filterSettings: settings
+    filterSettings: settings,
   });
-}
+};
 
 const triggerHotkey = () => {
   obs.call("TriggerHotkeyByName", {
     hotkeyName: process.env.HOTKEY_NAME,
   }).then().catch((e) => console.log(e));
-}
+};
 
-let SHOWN_DONATIONS = []
+let SHOWN_DONATIONS = [];
 
-socket.on("donation:show", ({amount, donationid}) => {
+// socket.onAny((event, data) => {
+//   console.log(event, data);
+// });
+
+socket.on("donation:show", ({ amount, donationid }) => {
   if (!active) {
     console.log("Donation received but I'm paused!");
     return false;
   }
 
   // Skip a donation if we already processed it
-  if(SHOWN_DONATIONS.includes(donationid)){
-    console.log("I already processed that donation", donationid)
+  if (SHOWN_DONATIONS.includes(donationid)) {
+    console.log("I already processed that donation", donationid);
     return false;
   }
 
   SHOWN_DONATIONS.push(donationid);
 
   // Get rid of the oldest donation in our array.
-  if(SHOWN_DONATIONS.length > 5){
-    SHOWN_DONATIONS.shift()
+  if (SHOWN_DONATIONS.length > 5) {
+    SHOWN_DONATIONS.shift();
   }
 
   const transform = obsTransformer.transform(amount);
