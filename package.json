@@ -5,9 +5,10 @@
   "description": "",
   "main": "index.js",
   "scripts": {
+    "serve": "nodemon --watch wsserver.js wsserver.js",
     "dev": "nodemon index.js",
     "start": "node index.js",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "scripts/test.sh"
   },
   "author": "",
   "license": "ISC",
