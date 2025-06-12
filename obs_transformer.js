@@ -103,12 +103,6 @@ export default class ObsTransformer {
       this.currentScale = 1;
     }
 
-    console.log({
-      posX: this.posX,
-      posY: this.posY,
-      scale: this.currentScale
-    })
-
     return {
       pos: {
         x: this.posX,
@@ -163,6 +157,27 @@ export default class ObsTransformer {
     this.posX = this.startX;
     this.posY = this.startY;
     this.angle = 0;
+  }
+
+  transform({ posX, posY, scale, scaleX, scaleY, angle, width, height }) {
+    this.angle = angle ?? this.angle;
+    this.currentScale = scale ?? this.currentScale;
+    this.currentWidth = width ?? this.startWidth * (scaleX ?? this.currentScale);
+    this.currentHeight = height ?? this.startHeight * (scaleY ?? this.currentScale);
+    this.posX = posX ?? this.startX + ((this.startWidth - this.currentWidth) / 2);
+    this.posY = posY ?? this.startY + ((this.startHeight - this.currentHeight) / 2);
+
+    return {
+      pos: {
+        x: this.posX,
+        y: this.posY
+      },
+      rot: this.angle,
+      scale: {
+        x: scaleX ?? this.currentScale,
+        y: scaleY ?? this.currentScale
+      }
+    }
   }
 
   flipH() {
