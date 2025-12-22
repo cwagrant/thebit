@@ -1,18 +1,22 @@
 {
-  "scenes": [
-    {
-      "name": "TransformGame1",
-      "gameSource": "game1",
-      "moveTransitionFilterName": "transform",
-      "filters": [
-        "sping",
-        "invert",
-        "delay"
-      ],
-      "sources": [
-        "spotlight",
-        "dvd"
+  "controllers": {
+    "OBS": {
+      "scenes": [
+        {
+          "name": "TransformGame1",
+          "gameSource": "game1",
+          "moveTransitionFilterName": "transform",
+          "filters": [
+            "sping",
+            "invert",
+            "delay"
+          ],
+          "sources": [
+            "spotlight",
+            "dvd"
+          ]
+        }
       ]
     }
-  ]
+  }
 }

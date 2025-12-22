@@ -47,7 +47,7 @@ export default class Client {
     for (const socket_event of ["open", "close", "error", "message"]) {
       this.ws.addEventListener(socket_event as keyof WebSocketEventMap, (event: any) => {
         const data = JSON.parse(event.data || '{}');
-        console.debug(`Client Received: ${socket_event} - ${JSON.stringify(data)}`);
+        // console.debug(`Client Received: ${socket_event} - ${JSON.stringify(data)}`);
 
         const received_event = socket_event == "message"
           ? data?.event
@@ -74,7 +74,9 @@ export default class Client {
       }
 
       setTimeout(() => {
-        console.debug(`Client Reconnection Attempt ${this.connectionAttempts}`)
+        if (this.connectionAttempts < 6) {
+          console.debug(`Client Reconnection Attempt ${this.connectionAttempts}`)
+        }
         this.connectionAttempts = this.connectionAttempts + 1;
         this.ws = new WebSocket(this.url);
         this.bindWebSocketEvents();

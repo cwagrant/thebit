@@ -1,25 +1,8 @@
 import { Controller } from "./controller.js"
 import { Scene, SceneItem } from "../obs/index.js"
 import ObsWebSocket from "obs-websocket-js";
+import cfg from "../config.js";
 // import config from "../config.json" assert {type: "json"};
-const config = {
-  "scenes": [
-    {
-      "name": "TransformGame1",
-      "gameSource": "game1",
-      "moveTransitionFilterName": "transform",
-      "filters": [
-        "sping",
-        "invert",
-        "delay"
-      ],
-      "sources": [
-        "spotlight",
-        "dvd"
-      ]
-    }
-  ]
-}
 
 // A controller in this case is equivalent to a scene in OBS identified by an ID.
 // Multiple controllers could exist and be modified in various ways. The question now
@@ -55,6 +38,8 @@ export default class ObsController extends Controller {
   gameSceneNamePrefix = 'Transform';
   gameSceneItemNamePrefix = 'game';
   password: string | undefined;
+  config: any = cfg.controller("OBS")
+
 
   constructor(url: string, password?: string) {
     super()
@@ -117,7 +102,7 @@ export default class ObsController extends Controller {
     this.obs.once("Identified", async () => {
       const { scenes: obsScenes } = await this.getSceneList();
 
-      for (const cScene of config.scenes) {
+      for (const cScene of this.config.scenes) {
         const oScene = obsScenes.find((s: any) => s.sceneName === cScene.name);
 
         if (!oScene) {
@@ -180,16 +165,8 @@ export default class ObsController extends Controller {
     return scene;
   }
 
-  getScene(name: string): Promise<Scene | undefined> {
-    const scene = this.scenes.get(name);
-
-    return new Promise((resolve, reject) => {
-      if (scene) {
-        resolve(scene);
-      } else {
-        reject(new Error(`No scene found with name ${name}`));
-      }
-    })
+  getScene(sceneName: string): Scene | null {
+    return this.scenes.get(sceneName) || null;
   }
 
   async getSceneList() {

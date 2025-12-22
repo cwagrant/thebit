@@ -71,6 +71,10 @@ class SceneItem {
     }
   }
 
+  toJSON(): any {
+    return { ...this, scene: this.scene.name }
+  }
+
   enableFilter(filterName: string): void {
     this.commands.push({
       command: "SetSourceFilterEnabled",

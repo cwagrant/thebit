@@ -4,7 +4,10 @@ import ObsController from "./controllers/obs_controller.js"
 import Client from "./client.js"
 // import Controller from "./controller.js";
 import { sleep, parseMessage } from "./helpers.js";
-import "dotenv/config";
+import dotenv from "dotenv";
+import path from "path";
+
+dotenv.config({ path: path.join(import.meta.dirname, "..", "..", ".env") });
 
 export default async () => {
   if (!process.env.WS_ADDRESS) {
@@ -21,12 +24,12 @@ export default async () => {
   await obs.connect();
 
   let modifiers = {
-    "test": () => {
-      obs.getScene("TransformGame1").then((scene) => {
-        scene?.getSceneItem()?.scale(0.5)
-        console.log(scene)
-      })
-    },
+    // "test": () => {
+    //   obs.getScene("TransformGame1").then((scene) => {
+    //     scene?.getSceneItem()?.scale(0.5)
+    //     console.log(scene)
+    //   })
+    // },
     //   "shrink": () => {
     //     const currentScale = obsTransformer.currentScale;
     //
