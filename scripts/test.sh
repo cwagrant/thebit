@@ -29,8 +29,8 @@ to_json_example() {
 
 message() {
   source .env
-  json=$(jq -n --arg "event" "$1" --arg "data" "$2" '$ARGS.named')
-
+  json="$(jq -n --arg "event" "$1" --arg "data" "$2" --argjson ${@:3} 'ARGS.named')"
+  echo "${json//$'\n'  /}"
   echo "${json//$'\n'/}" | websocat "$WS_ADDRESS"
 }
 
