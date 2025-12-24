@@ -1,6 +1,7 @@
 <script setup lang="ts">
   import type { Actions } from '../action.js';
   import ActionsView from './ActionsView.vue';
+import ActionView from './ActionView.vue';
   
   const { name, actions } = defineProps<{
     name: string,
@@ -12,7 +13,7 @@
     <p>{{ name }}</p>
     <div v-if="Array.isArray(actions)">
       <div v-for="action in actions">
-        <p>{{ action.action }}</p>
+        <ActionView :action="action" />
       </div>
     </div>
     <div v-else-if="typeof actions === 'object'">
