@@ -20,7 +20,21 @@ class UpstreamKey {
   }
 
   shrink({ magnitude }: { magnitude: number }): void {
-    
+    let existingSize = this.atem.state?.video.mixEffects[this.meIndex]?.upstreamKeyers[this.keyerIndex]?.dveSettings?.sizeX;
+    if (!existingSize) return;
+
+    let targetSize = existingSize * magnitude;
+    this.atem.setUpstreamKeyerDVESettings({
+      sizeX: targetSize,
+      sizeY: targetSize
+    }, this.meIndex, this.keyerIndex);
+  }
+
+  reset(): void {
+    this.atem.setUpstreamKeyerDVESettings({
+      sizeX: 1000,
+      sizeY: 1000
+    }, this.meIndex, this.keyerIndex);
   }
 
   getActions(): Actions {
