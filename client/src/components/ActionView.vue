@@ -75,7 +75,7 @@
   <template v-else-if="isPropAction(props.action)">
     <form class="mx-0 my-2 columns is-vcentered py-2" @submit.prevent="sendAction">
       <input type="hidden" name="action" :value="action.action"/>
-      <button type="submit" class="column button" :class="{'is-primary': hasProps(props.action.props)}">{{prettyPrintAction(action.action)}}</button>
+      <button type="submit" class="column button" :class="{'is-primary': hasProps(props.action.props), 'is-warning': !hasProps(props.action.props)}">{{prettyPrintAction(action.action)}}</button>
 
       <template v-for="(propType, name) in props.action.props">
         <input type="text" :name="name" class="column input ml-2 is-medium" v-if="propType=='string'" required>
