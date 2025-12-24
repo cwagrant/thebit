@@ -1,0 +1,5 @@
+root = true
+
+[*.ts,*.vue,*.html]
+index_style = space
+indent_size = 2
