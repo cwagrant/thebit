@@ -66,6 +66,10 @@ if (config.controller("ATEM")) {
       state: atem.atem.state
     });
   });
+
+  app.get("/api/atem/actions", (req: Request, res: Response) => {
+    res.json(atem.getActions());
+  });
 }
 
 app.use(express.static(path.join(import.meta.dirname, '..', 'client')));

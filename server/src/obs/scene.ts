@@ -1,10 +1,5 @@
 import { ObsCommand, SceneItem } from "./scene_item.js"
-
-interface Action {
-  action: string,
-  props?: any;
-  options?: any;
-}
+import { Action } from '../action.js';
 
 interface Item {
   name: string,
@@ -31,15 +26,6 @@ class Scene {
 
   loadState(state: any) {
     this.sceneItem.loadState(state.sceneItem)
-  }
-
-  usableActions(): string[] {
-    return [
-      "reset",
-      "scale",
-      "source",
-      "filter"
-    ]
   }
 
   setSceneItem(sceneItem: SceneItem): SceneItem {
