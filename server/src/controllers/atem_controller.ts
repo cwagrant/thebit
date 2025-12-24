@@ -9,8 +9,7 @@ export default class ATEMController extends Controller {
   constructor() {
     super();
 
-    this.atem = new Atem({ debugBuffers: true });
-    this.atem.on('debug', console.log)
+    this.atem = new Atem();
     this.atem.on('info', console.log);
     this.atem.on('error', console.error);
     this.atem.on('receivedCommands', console.log);
@@ -22,10 +21,7 @@ export default class ATEMController extends Controller {
   connect(ipAddress: string) {
     console.log(`Connecting to ATEM at ${ipAddress}...`);
     
-    this.atem.connect(ipAddress, 9910).catch((e) => {
-      console.error(e)
-      process.exit(0)
-    });
+    this.atem.connect(ipAddress);
   }
 
   start(): boolean {
