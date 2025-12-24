@@ -1,6 +1,7 @@
 import { Atem } from 'atem-connection';
 import { Actions } from '../action.js';
 import * as TWEEN from '@tweenjs/tween.js'
+import { VideoMode } from 'atem-connection/dist/enums/index.js';
 
 const DURATION = 500;
 
@@ -69,7 +70,7 @@ class UpstreamKey {
       () => {
         this.animation?.update();
       },
-      33
+      1000 / this._framerate()
     );
   }
 
@@ -78,6 +79,50 @@ class UpstreamKey {
       sizeX: size.x,
       sizeY: size.y
     }, this.meIndex, this.keyerIndex)
+  }
+
+  _framerate(): number {
+    let videoMode = this.atem.state?.settings.videoMode;
+    if (videoMode === undefined) return 30;
+
+    switch (videoMode) {
+      case VideoMode.N1080p60:
+        return 60;
+      case VideoMode.N1080i5994:
+      case VideoMode.N1080p5994:
+      case VideoMode.N4KHDp5994:
+      case VideoMode.N525i5994169:
+      case VideoMode.N525i5994NTSC:
+      case VideoMode.N720p5994:
+      case VideoMode.N8KHDp5994:
+        return 59.94;
+      case VideoMode.P1080i50:
+      case VideoMode.P1080p50:
+      case VideoMode.P4KHDp5000:
+      case VideoMode.P625i50169:
+      case VideoMode.P625i50PAL:
+      case VideoMode.P720p50:
+      case VideoMode.P8KHDp50:
+        return 50;
+      case VideoMode.N1080p2398:
+      case VideoMode.N4KHDp2398:
+      case VideoMode.N8KHDp2398:
+        return 23.98;
+      case VideoMode.N1080p24:
+      case VideoMode.N4KHDp24:
+      case VideoMode.N8KHDp24:
+        return 24;
+      case VideoMode.P1080p25:
+      case VideoMode.P4KHDp25:
+      case VideoMode.P8KHDp25:
+        return 25;
+      case VideoMode.N1080p2997:
+      case VideoMode.N4KHDp2997:
+      case VideoMode.N8KHDp2997:
+        return 29.97;
+      case VideoMode.N1080p30:
+        return 30;
+    }
   }
 
   getActions(): Actions {
