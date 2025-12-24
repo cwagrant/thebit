@@ -2,8 +2,6 @@ import { Atem } from 'atem-connection';
 import { Actions } from '../action.js';
 import { FlyKeyKeyFrame } from 'atem-connection/dist/enums/index.js';
 
-const DURATION = 0;
-
 class UpstreamKey {
   atem: Atem;
   meIndex: number;
@@ -16,7 +14,7 @@ class UpstreamKey {
   }
 
   scale({ scale }: { scale: number }): void {
-    this._scaleTo({ x: scale * 1000, y: scale * 1000 }, DURATION);
+    this._scaleTo({ x: scale * 1000, y: scale * 1000 });
   }
 
   shrink({ magnitude }: { magnitude: number }): void {
@@ -25,25 +23,27 @@ class UpstreamKey {
 
     let targetSize = existingSize * magnitude;
 
-    this._scaleTo({ x: targetSize, y: targetSize }, DURATION);
+    this._scaleTo({ x: targetSize, y: targetSize });
   }
 
   reset(): void {
-    this._scaleTo({ x: 1000, y: 1000 }, DURATION);
+    this._scaleTo({ x: 1000, y: 1000 });
   }
 
-  _scaleTo(size: { x: number, y: number }, duration: number): void {
-    this.atem.setUpstreamKeyerFlyKeyKeyframe(this.meIndex, this.keyerIndex, FlyKeyKeyFrame.A, {
-      sizeX: size.x,
-      sizeY: size.y
-    });
-
+  animationDuration({ duration }: { duration: number }): void {
     let rate = 30 * duration / 1000
     if (rate > 0) {
       this.atem.setUpstreamKeyerDVESettings({
         rate
       }, this.meIndex, this.keyerIndex);
     }
+  }
+
+  _scaleTo(size: { x: number, y: number }): void {
+    this.atem.setUpstreamKeyerFlyKeyKeyframe(this.meIndex, this.keyerIndex, FlyKeyKeyFrame.A, {
+      sizeX: size.x,
+      sizeY: size.y
+    });
 
     this.atem.runUpstreamKeyerFlyKeyTo(this.meIndex, this.keyerIndex, FlyKeyKeyFrame.A);
   }
@@ -61,6 +61,7 @@ class UpstreamKey {
       { action: "scale", options: { scale: [0.2, 0.5, 1, 2.5] } },
       { action: "reset", props: {} },
       { action: "shrink", props: { magnitude: "number" } },
+      { action: "animationDuration", props: { duration: "number" } },
     ]
   }
 
