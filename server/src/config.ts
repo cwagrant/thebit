@@ -1,7 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 
-interface ControllerConfig {
+interface OBSControllerConfig {
   scenes: SceneConfig[];
 }
 
@@ -13,8 +13,15 @@ interface SceneConfig {
   sources: string[];
 }
 
+interface ATEMControllerConfig {
+
+}
+
 interface ConfigData {
-  controllers: Map<string, ControllerConfig>;
+  controllers: {
+    OBS?: OBSControllerConfig;
+    ATEM?: ATEMControllerConfig;
+  }
 }
 
 class Config {
@@ -23,11 +30,14 @@ class Config {
   constructor(configPath: string = path.join(import.meta.dirname, '../../config.json')) {
     const rawData = fs.readFileSync(configPath, 'utf-8');
     this.configData = JSON.parse(rawData);
-    this.configData.controllers = new Map(Object.entries(this.configData.controllers));
+
+    if (Object.keys(this.configData.controllers).length === 0) {
+      throw new Error("No controllers defined in configuration file");
+    }
   }
 
-  controller(name: string): ControllerConfig | undefined {
-    return this.configData.controllers.get(name);
+  controller<Key extends keyof ConfigData['controllers']>(name: Key): ConfigData['controllers'][Key] | undefined {
+    return this.configData.controllers[name];
   }
 
   getData(): ConfigData {

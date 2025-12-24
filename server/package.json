@@ -16,6 +16,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "atem-connection": "^3.8.0",
     "axios": "^1.4.0",
     "dotenv": "^16.3.1",
     "express": "^4.22.1",

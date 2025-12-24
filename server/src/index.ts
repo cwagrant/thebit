@@ -5,9 +5,13 @@ import dotenv from "dotenv";
 
 dotenv.config({ path: path.join(import.meta.dirname, "..", "..", ".env") });
 import config from "./config.js"
+import ATEMController from "./controllers/atem_controller.js";
 
 const app = express();
 const PORT = 3131;
+
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
 if (config.controller("OBS")) {
   if (!process.env.OBS_WEBSOCKET_ADDRESS) {
@@ -20,8 +24,6 @@ if (config.controller("OBS")) {
   );
 
   obs.connect();
-  app.use(express.json());
-  app.use(express.urlencoded({ extended: true }));
 
   app.get("/api/obs", (req: Request, res: Response) => {
     res.json(config.controller("OBS"));
@@ -47,6 +49,45 @@ if (config.controller("OBS")) {
 
     res.json(scene || {})
   })
+}
+
+if (config.controller("ATEM")) {
+  if (!process.env.ATEM_IP_ADDRESS) {
+    throw new Error("ATEM_IP_ADDRESS must be set in your environment");
+  }
+
+  const atem = new ATEMController();
+  atem.connect(process.env.ATEM_IP_ADDRESS);
+
+  app.get("/api/atem", (req: Request, res: Response) => {
+    res.json({
+      config: config.controller("ATEM"),
+      status: atem.atem.status,
+      state: atem.atem.state
+    });
+  });
+
+  app.get("/api/atem/actions", (req: Request, res: Response) => {
+    res.json(atem.getActions());
+  });
+
+  app.post("/api/atem/action", (req: Request, res: Response) => {
+    const { action, path, ...args } = req.body;
+
+    if (typeof path !== "string") {
+      res.status(400).send("Path must be a string");
+      return;
+    }
+
+    if (typeof action !== "string") {
+      res.status(400).send("Action must be a string");
+      return;
+    }
+
+    console.log('req', action, path, args);
+    atem.action(action, path.split('.'), args);
+    res.sendStatus(200);
+  });
 }
 
 app.use(express.static(path.join(import.meta.dirname, '..', 'client')));

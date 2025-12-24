@@ -3,12 +3,7 @@ import { Scene, SceneItem } from "../obs/index.js"
 import ObsWebSocket from "obs-websocket-js";
 import cfg from "../config.js";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
-
-interface Action {
-  action: string,
-  props?: any,
-  options?: any
-}
+import { Action } from '../action.js';
 
 // import config from "../config.json" assert {type: "json"};
 
