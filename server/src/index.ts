@@ -70,6 +70,13 @@ if (config.controller("ATEM")) {
   app.get("/api/atem/actions", (req: Request, res: Response) => {
     res.json(atem.getActions());
   });
+
+  app.post("/api/atem/action", (req: Request, res: Response) => {
+    const { action, path, ...args } = req.body;
+    console.log('req', action, path, args);
+    atem.action(action, path, args);
+    res.sendStatus(200);
+  });
 }
 
 app.use(express.static(path.join(import.meta.dirname, '..', 'client')));

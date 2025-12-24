@@ -5,7 +5,7 @@ import { MixEffectsBus } from "../atem/mix_effects_bus.js";
 
 export default class ATEMController extends Controller {
   atem: Atem;
-  mixEffectsBuses: MixEffectsBus[] = [];
+  mixEffectsBuses: {[key: string]: MixEffectsBus} = {};
 
   constructor() {
     super();
@@ -29,11 +29,11 @@ export default class ATEMController extends Controller {
   }
 
   _loadAtemState(state: AtemState) {
-      this.mixEffectsBuses = state.info.mixEffects.map((mixEffectsBus, index) => {
-        if (!mixEffectsBus) return null;
-        return new MixEffectsBus(mixEffectsBus.keyCount);
-      })
-      .filter((bus) => bus !== null) as MixEffectsBus[];
+    for (let i = 0; i < state.info.mixEffects.length; i++) {
+      const mixEffectsBus = state.info.mixEffects[i];
+      if (!mixEffectsBus) continue;
+      this.mixEffectsBuses[`me${i}`] = new MixEffectsBus(this.atem, i, mixEffectsBus);
+    }
   }
 
   connect(ipAddress: string) {
@@ -57,10 +57,20 @@ export default class ATEMController extends Controller {
   getActions(): Actions {
     const actions: Actions = {};
 
-    for (let i = 0; i < this.mixEffectsBuses.length; i++) {
-      actions[`me${i}`] = this.mixEffectsBuses[i].getActions();
+    for (let [key, value] of Object.entries(this.mixEffectsBuses)) {
+      actions[key] = value.getActions();
     }
 
     return actions;
+  }
+
+  action(action: string, path: string[], props: any): void {
+    const me = path.shift();
+    if (!me) return;
+
+    const meBus = this.mixEffectsBuses[me];
+    if (!meBus) return;
+
+    meBus.action(action, path, props);
   }
 };
