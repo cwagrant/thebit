@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import ObsView from "../views/ObsView.vue"
+import InterfaceView from '@/views/InterfaceView.vue'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -7,7 +8,7 @@ const router = createRouter({
     {
       path: '/',
       name: 'home',
-      component: ObsView,
+      component: InterfaceView,
     },
     {
       path: '/about',
