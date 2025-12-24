@@ -3,7 +3,9 @@
   import { isOptionsAction, isPropAction } from '@/action';
 
   const props = defineProps<{
-    action: Action
+    action: Action,
+    path: string[],
+    controller: "obs" | "atem";
   }>();
   console.log('propAction', props)
   const hasOptions = "options" in props.action;
@@ -32,19 +34,19 @@
   const prettyPrintAction = (str: string) => titleize(decamelize(str))
 
   const sendAction = async (event: any) => {
-//     const target = event.currentTarget;
-//     let formData = Object.fromEntries(new FormData(target));
-//     formData.sceneName = props.sceneName;
-//     console.log('formData', formData)
-//     const response = await fetch(`/api/obs/action`, {
-//       method: "POST",
-//       body: JSON.stringify(formData),
-//       headers: {
-//         "Content-Type": "application/json"
-//       }
-//     });
-//     console.log('toggle source', event);
-//     console.log('response', response)
+    const target = event.currentTarget;
+    let formData = Object.fromEntries(new FormData(target));
+    formData.path = props.path.join('.');
+    console.log('formData', formData)
+    const response = await fetch(`/api/${props.controller}/action`, {
+      method: "POST",
+      body: JSON.stringify(formData),
+      headers: {
+        "Content-Type": "application/json"
+      }
+    });
+    console.log('toggle source', event);
+    console.log('response', response)
   }
 
   const getValue = (obj: any) => {

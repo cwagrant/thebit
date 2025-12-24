@@ -1,24 +1,28 @@
 <script setup lang="ts">
   import type { Actions } from '../action.js';
   import ActionsView from './ActionsView.vue';
-import ActionView from './ActionView.vue';
+  import ActionView from './ActionView.vue';
   
-  const { name, actions } = defineProps<{
-    name: string,
-    actions: Actions
+  const { title, path } = defineProps<{
+    path: string[],
+    title: string,
+    actions: Actions,
+    controller: "obs" | "atem";
   }>();
+
+  const fullPath = path.concat([title]);
 </script>
 <template>
   <div>
-    <p>{{ name }}</p>
+    <p>{{ title }}</p>
     <div v-if="Array.isArray(actions)">
       <div v-for="action in actions">
-        <ActionView :action="action" />
+        <ActionView :action="action" :path="fullPath" :controller="controller" />
       </div>
     </div>
     <div v-else-if="typeof actions === 'object'">
-      <div v-for="(mapping, name) in actions">
-        <ActionsView :name="name" :actions="mapping" />
+      <div v-for="(mapping, title) in actions">
+        <ActionsView :title="title" :actions="mapping" :path="fullPath" :controller="controller" />
       </div>
     </div>        
   </div>

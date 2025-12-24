@@ -31,7 +31,7 @@
 <template>
   <main>
     <div v-if="isLoading === false">
-      <ActionsView :name="props.title" :actions="data" />
+      <ActionsView :title="title" :actions="data" :path="[]" :controller="controller" />
     </div>
   </main>
 </template>

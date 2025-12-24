@@ -73,8 +73,19 @@ if (config.controller("ATEM")) {
 
   app.post("/api/atem/action", (req: Request, res: Response) => {
     const { action, path, ...args } = req.body;
+
+    if (typeof path !== "string") {
+      res.status(400).send("Path must be a string");
+      return;
+    }
+
+    if (typeof action !== "string") {
+      res.status(400).send("Action must be a string");
+      return;
+    }
+
     console.log('req', action, path, args);
-    atem.action(action, path, args);
+    atem.action(action, path.split('.'), args);
     res.sendStatus(200);
   });
 }
