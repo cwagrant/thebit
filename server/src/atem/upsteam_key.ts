@@ -2,7 +2,7 @@ import { Atem } from 'atem-connection';
 import { Actions } from '../action.js';
 import { FlyKeyKeyFrame } from 'atem-connection/dist/enums/index.js';
 
-const DURATION = 500;
+const DURATION = 0;
 
 class UpstreamKey {
   atem: Atem;
@@ -33,19 +33,17 @@ class UpstreamKey {
   }
 
   _scaleTo(size: { x: number, y: number }, duration: number): void {
-    if (duration <= 0) {
-      this._jumpTo(size);
-      return;
-    }
-
     this.atem.setUpstreamKeyerFlyKeyKeyframe(this.meIndex, this.keyerIndex, FlyKeyKeyFrame.A, {
       sizeX: size.x,
       sizeY: size.y
     });
 
-    this.atem.setUpstreamKeyerDVESettings({
-      rate: 30 * duration / 1000
-    }, this.meIndex, this.keyerIndex);
+    let rate = 30 * duration / 1000
+    if (rate > 0) {
+      this.atem.setUpstreamKeyerDVESettings({
+        rate
+      }, this.meIndex, this.keyerIndex);
+    }
 
     this.atem.runUpstreamKeyerFlyKeyTo(this.meIndex, this.keyerIndex, FlyKeyKeyFrame.A);
   }
