@@ -12,7 +12,7 @@
   "scripts": {
     "serve": "nodemon --watch wsserver.js wsserver.js",
     "start-server": "node wsserver.js",
-    "dev": "concurrently \"npm run dev-watch -w server\" \"npm run dev-watch-build -w server\" \"npm run dev -w client\"",
+    "dev": "concurrently \"npm run dev -w server\" \"npm run dev -w client\"",
     "build": "npm run build --workspaces",
     "start": "node dist/index.js",
     "test": "scripts/test.sh"

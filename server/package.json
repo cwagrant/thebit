@@ -8,8 +8,7 @@
   "scripts": {
     "serve": "nodemon --watch wsserver.js wsserver.js",
     "start-server": "node wsserver.js",
-    "dev-watch": "tsc -w --preserveWatchOutput",
-    "dev-watch-build": "nodemon --watch ../dist/server/ ../dist/server/index.js",
+    "dev": "tsc-watch --onSuccess \"node ../dist/server/index.js\"",
     "build": "tsc",
     "start": "node dist/index.js",
     "test": "scripts/test.sh"
