@@ -28,8 +28,8 @@ if (config.controller("OBS")) {
   })
 
   app.get("/api/obs/actions", (req: Request, res: Response) => {
-    const protocol = obs.getProtocol();
-    const object = Object.fromEntries(protocol);
+    const actions = obs.getActions();
+    const object = Object.fromEntries(actions);
 
     res.json(object);
   })

@@ -4,7 +4,7 @@ import 'bulma/css/bulma.min.css'
 </script>
 
 <template>
-  <nav class="navbar is-fixed-top">
+  <nav class="container navbar is-fixed-top">
     <div class="buttons">
       <RouterLink class="button is-primary" to="/">Home</RouterLink>
       <RouterLink class="button is-primary" to="/about">About</RouterLink>

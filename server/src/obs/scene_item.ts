@@ -6,7 +6,6 @@ type SceneItemProps = {
   scene: Scene;
   active: boolean;
   rotation: number;
-  transformFilterName: string;
   defaultSize: { width: number, height: number };
   defaultPosition: { x: number, y: number };
   defaultScale: { x: number, y: number };
@@ -38,17 +37,16 @@ class SceneItem {
   id!: number;
   private scene!: Scene;
   private active: boolean = true;
-  private rotation!: number;
-  private alignment!: Alignment;
+  rotation!: number;
+  alignment!: Alignment;
   private commands: ObsCommand[] = [];
-  private transformFilterName!: string;
   private defaultSize!: { width: number, height: number };
   private defaultPosition!: { x: number, y: number };
   private defaultScale!: { x: number, y: number };
   private defaultAlignment!: Alignment;
-  private currentPosition: { x: number, y: number };
-  private currentSize: { width: number, height: number };
-  private currentScale: { x: number, y: number };
+  currentPosition: { x: number, y: number };
+  currentSize: { width: number, height: number };
+  currentScale: { x: number, y: number };
 
   constructor(props: SceneItemProps) {
     Object.assign(this, props)
@@ -75,9 +73,14 @@ class SceneItem {
 
   getTransform(): any {
     return {
-      pos: this.currentPosition,
-      rot: this.rotation,
-      scale: this.currentScale,
+      rotation: 0,
+      alignment: this.alignment,
+      height: this.defaultHeight(),
+      width: this.defaultWidth(),
+      positionX: this.defaultX(),
+      positionY: this.defaultY(),
+      scaleX: this.defaultScaleX(),
+      scaleY: this.defaultScaleY()
     }
   }
 
@@ -85,26 +88,12 @@ class SceneItem {
     return { ...this, scene: this.scene.name }
   }
 
-  enableFilter(filterName: string): void {
-    this.commands.push({
-      command: "SetSourceFilterEnabled",
-      props: {
-        sourceName: this.scene.name,
-        filterName: filterName,
-        filterEnabled: true
-      }
-    })
-  }
-
-  pushTransform(): void {
-    this.commands.push({
-      command: "SetSourceFilterSettings",
-      props: {
-        sourceName: this.scene.name,
-        filterName: this.transformFilterName,
-        filterSettings: this.getTransform()
-      }
-    })
+  center(): void {
+    this.alignment = Alignment.Center;
+    this.currentPosition = {
+      x: this.defaultWidth() / 2,
+      y: this.defaultHeight() / 2
+    }
   }
 
   reset(): void {
@@ -113,40 +102,9 @@ class SceneItem {
     this.currentScale = this.defaultScale;
     this.currentSize = this.defaultSize;
     this.alignment = this.defaultAlignment
-
-    this.setSceneItemTransform({
-      sceneItemId: this.id,
-      sceneName: this.scene.name,
-      sceneItemTransform: {
-        alignment: this.alignment,
-        height: this.defaultHeight(),
-        width: this.defaultWidth(),
-        positionX: this.defaultX(),
-        positionY: this.defaultY(),
-        scaleX: this.defaultScaleX(),
-        scaleY: this.defaultScaleY()
-      }
-    })
-  }
-
-  setSceneItemTransform(props: any): void {
-    this.commands.push({
-      command: "SetSceneItemTransform",
-      props: props
-    })
   }
 
   scale(scaleX: number, scaleY?: number): void {
-    this._scale(scaleX, scaleY ?? scaleX)
-    this.pushTransform();
-    this.enableFilter(this.transformFilterName);
-  }
-
-  // Private version of the Scale method used to do the
-  // actual scaling logic. The public version of the method
-  // only queues up the commands to be sent to OBS to perform
-  // the actual scaling.
-  _scale(scaleX: number, scaleY?: number): void {
     this.currentScale = {
       x: scaleX,
       y: scaleY ?? scaleX
@@ -158,32 +116,33 @@ class SceneItem {
     }
   }
 
-  rotate(angle: number): void {
-    this._rotate(angle)
-    this.pushTransform()
-    this.enableFilter(this.transformFilterName)
+  adjustSize(magnitude: number): void {
+    const newScale = this.scaleX() * magnitude;
+    this.scale(newScale)
   }
 
-  _rotate(angle: number): void {
+  rotate(angle: number): void {
     this.rotation += angle;
 
-    const isSideways = (angle % 180) == 90
-    const upsideDown = (angle % 360) >= 180
+    console.log('newrotation', this.rotation, angle)
 
-    this._scale(isSideways ? (9 / 16) : 1)
+    // const isSideways = (angle % 180) == 90
+    // const upsideDown = (angle % 360) >= 180
 
-    if (isSideways) {
-      this.currentPosition = {
-        x: upsideDown ? (this.defaultWidth() / 2) - (this.height() / 2) : (this.defaultWidth() / 2) + (this.height() / 2),
-        y: 0
-      }
-    } else {
+    // this.scale(isSideways ? (9 / 16) : 1)
 
-      this.currentPosition = {
-        x: upsideDown ? this.defaultWidth() : this.currentPosition["x"],
-        y: upsideDown ? this.defaultHeight() : this.currentPosition["y"]
-      }
-    }
+    // if (isSideways) {
+    //   this.currentPosition = {
+    //     x: upsideDown ? (this.defaultWidth() / 2) - (this.height() / 2) : (this.defaultWidth() / 2) + (this.height() / 2),
+    //     y: 0
+    //   }
+    // } else {
+    //
+    //   this.currentPosition = {
+    //     x: upsideDown ? this.defaultWidth() : this.currentPosition["x"],
+    //     y: upsideDown ? this.defaultHeight() : this.currentPosition["y"]
+    //   }
+    // }
   }
 
   height(): number {

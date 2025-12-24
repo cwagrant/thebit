@@ -140,11 +140,11 @@ export default class ObsController extends Controller {
         if (!oScene) {
           continue;
         }
-        console.log('oscene', oScene)
 
         const scene = this.addScene(new Scene({
           name: oScene.sceneName,
           uuid: oScene.sceneUuid,
+          transitionFilterName: cScene.moveTransitionFilterName
         }));
 
         const oSceneItems = await this.getSceneItemList({
@@ -160,7 +160,6 @@ export default class ObsController extends Controller {
               id: oSceneItem.sceneItemId,
               scene: scene,
               active: true,
-              transformFilterName: cScene.moveTransitionFilterName,
               defaultPosition: { x: transform.positionX, y: transform.positionY },
               defaultScale: { x: transform.scaleX, y: transform.scaleY },
               defaultSize: { width: transform.width, height: transform.height },
@@ -230,12 +229,12 @@ export default class ObsController extends Controller {
     }).then((response: any) => response.filters)
   }
 
-  getProtocol(): Map<string, Action[]> {
-    const protocol = new Map<string, Action[]>(
-      this.scenes.values().map((scene: Scene) => [scene.name, scene.getProtocol()])
+  getActions(): Map<string, Action[]> {
+    const actions = new Map<string, Action[]>(
+      this.scenes.values().map((scene: Scene) => [scene.name, scene.getActions()])
     )
 
-    return protocol;
+    return actions;
   }
 
   action(action: string, sceneName: string, props: any): void {
