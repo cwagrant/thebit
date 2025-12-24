@@ -1,5 +1,5 @@
 import { Controller } from "./controller.js"
-import { Atem } from 'atem-connection';
+import { Atem, AtemState } from 'atem-connection';
 import { Actions } from '../action.js';
 import { MixEffectsBus } from "../atem/mix_effects_bus.js";
 
@@ -15,16 +15,25 @@ export default class ATEMController extends Controller {
     this.atem.on('error', console.error);
     this.atem.on('connected', () => {
       console.log('ATEM connected');
+
+      let state = this.atem.state;
+      if (state) {
+        this._loadAtemState(state);
+      }
     });
     this.atem.on('stateChanged', (state) => {
       console.log('ATEM state changed: ', state);
       
+      this._loadAtemState(state);
+    });
+  }
+
+  _loadAtemState(state: AtemState) {
       this.mixEffectsBuses = state.info.mixEffects.map((mixEffectsBus, index) => {
         if (!mixEffectsBus) return null;
         return new MixEffectsBus(mixEffectsBus.keyCount);
       })
       .filter((bus) => bus !== null) as MixEffectsBus[];
-    });
   }
 
   connect(ipAddress: string) {
