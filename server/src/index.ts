@@ -14,7 +14,7 @@ const PORT = 3131;
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-const listeners = new Listeners()
+const listeners = new Listeners(config.listeners)
 
 if (config.controller("OBS")) {
   if (!process.env.OBS_WEBSOCKET_ADDRESS) {

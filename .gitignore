@@ -6,3 +6,4 @@ config.json
 *.state.json
 *.zip
 listeners.yaml
+config.yaml

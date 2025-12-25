@@ -4,7 +4,6 @@ import ObsWebSocket from "obs-websocket-js";
 import cfg from "../config.js";
 import { existsSync, readFileSync } from "node:fs";
 import { writeFile } from "node:fs/promises";
-import { Action } from '../action.js';
 
 export default class ObsController extends Controller {
   scenes: Map<string, Scene> = new Map();

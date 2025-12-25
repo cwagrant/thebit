@@ -1,11 +1,10 @@
 import { Controller } from "./controller.js"
 import { Atem, AtemState } from 'atem-connection';
-import { Actions } from '../action.js';
 import { MixEffectsBus } from "../atem/mix_effects_bus.js";
 
 export default class ATEMController extends Controller {
   atem: Atem;
-  mixEffectsBuses: {[key: string]: MixEffectsBus} = {};
+  mixEffectsBuses: { [key: string]: MixEffectsBus } = {};
 
   constructor() {
     super();
@@ -23,7 +22,7 @@ export default class ATEMController extends Controller {
     });
     this.atem.on('stateChanged', (state) => {
       console.log('ATEM state changed');
-      
+
       this._loadAtemState(state);
     });
   }
@@ -38,7 +37,7 @@ export default class ATEMController extends Controller {
 
   connect(ipAddress: string) {
     console.log(`Connecting to ATEM at ${ipAddress}...`);
-    
+
     this.atem.connect(ipAddress);
   }
 

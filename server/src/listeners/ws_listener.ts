@@ -5,7 +5,6 @@ import ATEMController from "../controllers/atem_controller.js";
 
 class WSListener extends Listener {
   private _socket;
-  private _history: string[] = [];
 
   constructor(config: any) {
     super(config);
@@ -17,47 +16,33 @@ class WSListener extends Listener {
     return this._socket;
   }
 
-  checkHistory(uid: string): boolean {
-    if (this._history.includes(uid)) {
-      return true
-    } else {
-      this._history.push(uid);
-
-      if (this._history.length > 100) {
-        this._history.slice(0, (this._history.length - 100))
-      }
-
-      return false
-    }
-  }
-
   parseRules(controller: IController): void {
     this.rules.forEach((rule) => {
       this.socket.on(rule.on, (args: any) => {
-        if (rule.uid in args) {
-          if (this.checkHistory(args[rule.uid])) {
-            console.debug(`Duplicate event received for uid ${args[rule.uid]}, ignoring.`)
-            return;
-          }
+        const listenerAction: ListenerAction = this.execRule(rule.script, args);
+        console.debug('listenerAction', listenerAction)
+
+        if (this.checkHistory(listenerAction.uid)) {
+          console.debug(`Duplicate event received for uid ${listenerAction.uid}, ignoring.`)
+          return;
         }
-        const listenerAction = this.execRule(rule.function, args);
 
         console.debug('listenerAction', listenerAction, args)
 
         if (controller instanceof ObsController) {
           try {
-            let { action, sceneName, ...props } = listenerAction
+            let { action, path, ...props } = listenerAction
 
             if (!action) {
               return;
             }
 
-            if (!sceneName) {
+            if (!path) {
               controller.scenes.forEach((scene) => {
                 controller.action(action, scene.name, props);
               })
             } else {
-              controller.action(action, sceneName, props);
+              controller.action(action, path, props);
             }
           }
           catch (err: any) {
