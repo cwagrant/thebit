@@ -32,6 +32,7 @@ abstract class Listener {
         event: event,
       };
 
+      console.log("Executing rule in listener", this.name, "with event:", event);
       const vm = new VM({ sandbox });
 
       return vm.run(func)

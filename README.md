@@ -35,6 +35,19 @@ To address instances where you could potentially recieve duplicates of a message
 When developing you can use `npm run dev` to run with nodemon to automatically
 reload as you make changes to the files.
 
+For testing WSListeners you can use `node scripts/wsserver.js`, just ensure your `.env` has a `WS_ADDRESS` set in it like so
+```shell
+WS_ADDRESS=ws://localhost:8080` value set
+```
+
+You can then send test messages via like so
+```
+./scripts/test.sh send amount 10.00 donationid abc123 event donation:show
+```
+
+The `test.sh` script has a few odd commands in it but the most important is `send` which lets you send a simple JSON formatted message over the server created via `wsserver.js`. This requires having `websocat` and `js` available on your machine.
+
+
 ### Production
 
 To run this in a production capacity you'll need to run it with `npm run start`.

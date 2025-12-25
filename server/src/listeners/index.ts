@@ -1,4 +1,5 @@
 import { SocketIOListener } from "./socketio_listener.js";
+import { WSListener } from "./ws_listener.js";
 import { readFileSync } from "node:fs";
 import path from "path";
 import { parse } from "yaml";
@@ -30,12 +31,19 @@ class Listeners {
     return this._listeners;
   }
 
+  // TODO need to look at validating that a listener is setup for the controller
+  // type indicated in listeners.yaml
   setupListeners(controller: IController): void {
     this.configs.forEach((cfg: ListenerConfig) => {
       if (cfg.listener == "socketio") {
         const listener = new SocketIOListener(cfg);
         listener.parseRules(controller);
         console.log('createdListener', listener)
+        this._listeners.set(listener.name, listener);
+      } else if (cfg.listener == "ws") {
+        const listener = new WSListener(cfg);
+        listener.parseRules(controller);
+        console.log('createdListener', listener);
         this._listeners.set(listener.name, listener);
       }
     })
