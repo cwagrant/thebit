@@ -1,5 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
+import { parse } from "yaml";
 
 interface OBSControllerConfig {
   scenes: SceneConfig[];
@@ -22,14 +23,15 @@ interface ConfigData {
     OBS?: OBSControllerConfig;
     ATEM?: ATEMControllerConfig;
   }
+  listeners: ListenerConfig[];
 }
 
 class Config {
   private configData: ConfigData;
 
-  constructor(configPath: string = path.join(import.meta.dirname, '../../config.json')) {
+  constructor(configPath: string = path.join(import.meta.dirname, '../../config.yaml')) {
     const rawData = fs.readFileSync(configPath, 'utf-8');
-    this.configData = JSON.parse(rawData);
+    this.configData = parse(rawData);
 
     if (Object.keys(this.configData.controllers).length === 0) {
       throw new Error("No controllers defined in configuration file");
@@ -42,6 +44,10 @@ class Config {
 
   get controllers() {
     return Object.keys(this.configData.controllers);
+  }
+
+  get listeners() {
+    return this.configData.listeners;
   }
 
   getData(): ConfigData {

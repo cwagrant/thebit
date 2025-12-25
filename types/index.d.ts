@@ -7,8 +7,7 @@ interface IController {
 
 type ListenerRule = {
   on: string,
-  uid: string,
-  function: string | VMScript,
+  script: string | VMScript,
 }
 
 interface ListenerConfig {
@@ -19,3 +18,23 @@ interface ListenerConfig {
   rules: ListenerRule
 }
 
+interface PropAction {
+  action: string;
+  props: { [key: string]: any };
+};
+
+interface OptionsAction {
+  action: string;
+  options: { [key: string]: any[] };
+}
+
+type Action = PropAction | OptionsAction;
+
+type Actions = { [key: string]: Actions } | Action[];
+
+interface ListenerAction {
+  uid?: string,
+  path?: string,
+  action: string,
+  [key: string]: any
+}

@@ -1,5 +1,4 @@
 import { ObsCommand, SceneItem } from "./scene_item.js"
-import { Action } from '../action.js';
 
 interface Item {
   name: string,

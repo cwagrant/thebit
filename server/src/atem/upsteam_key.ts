@@ -1,5 +1,4 @@
 import { Atem } from 'atem-connection';
-import { Actions } from '../action.js';
 import { FlyKeyKeyFrame } from 'atem-connection/dist/enums/index.js';
 
 class UpstreamKey {

@@ -1,10 +1,10 @@
 import { io } from "socket.io-client";
 import { Listener } from "./base.js";
 import ObsController from "../controllers/obs_controller.js";
+import ATEMController from "../controllers/atem_controller.js";
 
 class SocketIOListener extends Listener {
   private _socket;
-  private _history: string[] = [];
 
   constructor(config: any) {
     super(config);
@@ -16,49 +16,53 @@ class SocketIOListener extends Listener {
     return this._socket;
   }
 
-  checkHistory(uid: string): boolean {
-    if (this._history.includes(uid)) {
-      return true
-    } else {
-      this._history.push(uid);
-
-      if (this._history.length > 100) {
-        this._history.slice(0, (this._history.length - 100))
-      }
-
-      return false
-    }
-  }
-
   parseRules(controller: IController): void {
     this.rules.forEach((rule) => {
       this.socket.on(rule.on, (args: any) => {
-        if (rule.uid in args) {
-          if (this.checkHistory(args[rule.uid])) {
-            console.debug(`Duplicate event received for uid ${args[rule.uid]}, ignoring.`)
-            return;
-          }
-        }
-        const listenerAction = this.execRule(rule.function, args);
-
+        const listenerAction: ListenerAction = this.execRule(rule.script, args);
         console.debug('listenerAction', listenerAction)
+
+        if (this.checkHistory(listenerAction.uid)) {
+          console.debug(`Duplicate event received for uid ${listenerAction.uid}, ignoring.`)
+          return;
+        }
 
         if (controller instanceof ObsController) {
           try {
-            let { action, sceneName, ...props } = listenerAction
+            let { action, path, ...props } = listenerAction
             if (!action) {
               return;
             }
 
-            if (!sceneName) {
+            if (!path) {
               controller.scenes.forEach((scene) => {
                 controller.action(action, scene.name, props);
               })
             } else {
-              controller.action(action, sceneName, props);
+              controller.action(action, path, props);
             }
           }
           catch (err: any) {
+            console.error("Error executing listener action:", err)
+          }
+        } else if (controller instanceof ATEMController) {
+          try {
+            let { action, path, ...args } = listenerAction
+
+            if (!action) {
+              return
+            }
+
+            if (typeof path !== "string") {
+              throw new Error("ATEM Listener action requires a valid 'path' string.")
+            }
+
+            if (typeof action !== "string") {
+              throw new Error("ATEM Listener action requires a valid 'action' string.")
+            }
+
+            controller.action(action, path.split("."), args);
+          } catch (err: any) {
             console.error("Error executing listener action:", err)
           }
         }

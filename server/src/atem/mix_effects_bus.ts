@@ -1,11 +1,10 @@
 import { UpstreamKey } from "./upsteam_key.js";
-import { Actions } from '../action.js';
 import { Atem } from "atem-connection";
 import { MixEffectInfo } from "atem-connection/dist/state/info.js";
 
 class MixEffectsBus {
   meIndex: number;
-  upstreamKeys: {[key: string]: UpstreamKey} = {};
+  upstreamKeys: { [key: string]: UpstreamKey } = {};
 
   constructor(atem: Atem, meIndex: number, info: MixEffectInfo) {
     this.meIndex = meIndex;
