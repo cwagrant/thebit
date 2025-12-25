@@ -1,0 +1,31 @@
+listeners:
+  - name: DonationFaker
+    listener: socketio
+    controller: obs
+    address: http://localhost:8080
+    options:
+      extraHeaders:
+        Authorization: Bearer abc123
+      auth:
+        token: Bearer abc123
+    rules:
+      # A rule's function is JS and just needs to return a value
+      # either by doing an IIFE or just ensure the final value
+      # returned by the script is the value you wish to use.
+      - on: "donation:show"
+        uid: donationid
+        function: |
+          (()=>{
+          const amount = parseFloat(event.amount)
+          const amountInCents = parseInt(amount * 100)
+          let magnitude = amount / 100
+
+          if(magnitude > 1) {
+            magnitude = 1
+          }
+
+          if (parseInt(amount * 100)% 2 == 0)
+            return {action: "shrink", magnitude}
+          else
+            return {action: "grow", magnitude}
+          })()

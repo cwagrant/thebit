@@ -2,6 +2,7 @@ import express, { Request, Response } from "express";
 import path from "path";
 import ObsController from "./controllers/obs_controller.js"
 import dotenv from "dotenv";
+import { Listeners, SocketIOListener } from "./listeners/index.js"
 
 dotenv.config({ path: path.join(import.meta.dirname, "..", "..", ".env") });
 import config from "./config.js"
@@ -12,6 +13,8 @@ const PORT = 3131;
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+const listeners = new Listeners()
 
 if (config.controller("OBS")) {
   if (!process.env.OBS_WEBSOCKET_ADDRESS) {
@@ -24,6 +27,7 @@ if (config.controller("OBS")) {
   );
 
   obs.connect();
+  listeners.setupListeners(obs);
 
   app.get("/api/obs", (req: Request, res: Response) => {
     res.json(config.controller("OBS"));
@@ -99,3 +103,5 @@ app.get('/*', (req, res) => {
 app.listen(PORT, () => {
   console.log(`Server is running on http://localhost:${PORT}`);
 });
+
+

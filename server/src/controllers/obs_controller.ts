@@ -5,34 +5,6 @@ import cfg from "../config.js";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { Action } from '../action.js';
 
-// import config from "../config.json" assert {type: "json"};
-
-// A controller in this case is equivalent to a scene in OBS identified by an ID.
-// Multiple controllers could exist and be modified in various ways. The question now
-// is how do we send commands from a Controller to an underlying system.
-//
-// It might be better to refer to these as scenes instead to avoid confusion. Then
-// the controller will be something that a scene can call up to to perform actions
-// on it's behalf.
-//
-// E.g. multiple scenes could share a singular controller. Once a Scene transforms
-// its state as needed it will call up to it's controller for performing the
-// actual action. To do this a Controller will need to implement a send function
-// that will make changes on the OBS side of things.
-//
-// I think right now the best way to handle this would be a Controller will be 
-// like the current ObsController and a Scene will be like the ObsTransformer.
-//
-// A scene will be called by the controller with what it wants to do and the
-// scene will respond with what needs to happen to do that.
-//
-// E.g. Controller receives message saying we need to activate the dvd sceneItem.
-// The Controller then passes that message to the Scene which crafts a message for
-// the Controller to Send.
-//
-// E.g. {"command": "GetSceneItemEnabled", "args": {}}
-// Controller then uses ObsWebsocket to `call(command, args)`
-//
 export default class ObsController extends Controller {
   scenes: Map<string, Scene> = new Map();
   url: string;
@@ -64,7 +36,6 @@ export default class ObsController extends Controller {
     try {
       const data = readFileSync("../obs_controller.state.json", "utf-8");
       const state = JSON.parse(data.toString())
-
       for (const [sceneName, sceneState] of Object.entries(state)) {
         const scene = this.getScene(sceneName);
         if (scene) {

@@ -11,7 +11,9 @@
     "skipLibCheck": true,
     "preserveWatchOutput": true
   },
-  "files": [],
+  "files": [
+    "./types/index.d.ts"
+  ],
   "references": [
     {
       "path": "./server"
