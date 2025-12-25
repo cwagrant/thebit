@@ -36,7 +36,7 @@ reload as you make changes to the files.
 
 For testing WSListeners you can use `node scripts/wsserver.js`, just ensure your `.env` has a `WS_ADDRESS` set in it like so
 ```shell
-WS_ADDRESS=ws://localhost:8080` value set
+WS_ADDRESS=ws://localhost:8080
 ```
 
 You can then send test messages via like so
