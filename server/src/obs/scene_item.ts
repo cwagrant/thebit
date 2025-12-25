@@ -57,11 +57,15 @@ class SceneItem {
     this.alignment = this.defaultAlignment;
   }
 
-  loadState({ defaultSize, defaultPosition, defaultScale, defaultAlignment }: SceneItemProps): void {
-    this.currentSize = this.defaultSize = defaultSize
-    this.currentPosition = this.defaultPosition = defaultPosition
-    this.currentScale = this.defaultScale = defaultScale
-    this.alignment = this.defaultAlignment = defaultAlignment
+  loadState(state: SceneItem): void {
+    this.currentSize = state.currentSize
+    this.defaultSize = state.defaultSize
+    this.currentPosition = state.currentPosition
+    this.defaultPosition = state.defaultPosition
+    this.currentScale = state.currentScale
+    this.defaultScale = state.defaultScale
+    this.alignment = state.alignment
+    this.defaultAlignment = state.defaultAlignment
     console.log(this.toJSON())
   }
 

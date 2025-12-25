@@ -2,7 +2,8 @@ import { Controller } from "./controller.js"
 import { Scene, SceneItem } from "../obs/index.js"
 import ObsWebSocket from "obs-websocket-js";
 import cfg from "../config.js";
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
+import { writeFile } from "node:fs/promises";
 import { Action } from '../action.js';
 
 export default class ObsController extends Controller {
@@ -26,7 +27,7 @@ export default class ObsController extends Controller {
   dumpState(): void {
     const state = Object.fromEntries(this.scenes);
 
-    writeFileSync("../obs_controller.state.json", JSON.stringify(state, null, 2));
+    writeFile("../obs_controller.state.json", JSON.stringify(state, null, 2));
   }
 
   loadState(): void {
@@ -217,6 +218,7 @@ export default class ObsController extends Controller {
       console.log(`responds to ${action}`, props)
       actionFunc.apply(scene, [props]);
       this.send(scene.name);
+      this.dumpState();
     }
   }
 
