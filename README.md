@@ -30,7 +30,7 @@ rules:
 To address instances where you could potentially recieve duplicates of a message, listeners implement a history of 100 unique id's. Unique ID's must be provided by the server we are listening to and you can identify what value in the event can be used as such by returning a "uid" key in your script as part of the returned `ListenerAction`.
 
 For example
-```
+```yaml
 rules:
     - on: "donation:show"
       script: |
