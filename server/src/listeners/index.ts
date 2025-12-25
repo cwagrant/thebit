@@ -18,8 +18,8 @@ class Listeners {
     return this._listeners;
   }
 
-  // TODO need to look at validating that a listener is setup for the controller
-  // type indicated in listeners.yaml
+  // TODO need to look at validating that a listener is setup for the
+  // correct controller as indicated in the config.
   setupListeners(controller: IController): void {
     this.configs.forEach((cfg: ListenerConfig) => {
       if (cfg.listener == "socketio") {

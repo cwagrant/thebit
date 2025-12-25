@@ -7,7 +7,7 @@ interface IController {
 
 type ListenerRule = {
   on: string,
-  script: string | VMScript,
+  function: Function
 }
 
 interface ListenerConfig {

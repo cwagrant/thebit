@@ -11,7 +11,7 @@ abstract class Listener {
     rules.forEach((rule) => {
       this._rules.push({
         on: rule.on,
-        script: new VMScript(rule.script)
+        function: rule.function
       })
     })
   }
@@ -43,16 +43,17 @@ abstract class Listener {
     return this._rules;
   }
 
-  execRule(func: VMScript, event: any): any {
+  execRule(rule: ListenerRule, event: any): any {
     try {
       let sandbox = {
         event: event,
+        ruleFunc: rule.function
       };
 
       console.log("Executing rule in listener", this.name, "with event:", event);
       const vm = new VM({ sandbox });
 
-      return vm.run(func)
+      return vm.run(`ruleFunc(event);`);
     } catch (err: any) {
       console.log(`Error executing rule in listener '${this.name}' :`, err);
     }

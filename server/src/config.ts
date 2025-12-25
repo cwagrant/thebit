@@ -1,6 +1,4 @@
-import * as fs from 'fs';
 import * as path from 'path';
-import { parse } from "yaml";
 
 interface OBSControllerConfig {
   scenes: SceneConfig[];
@@ -26,15 +24,32 @@ interface ConfigData {
   listeners: ListenerConfig[];
 }
 
+let jsConfig: ConfigData;
+
+const configPath = path.join(
+  import.meta.dirname, "..", "..", "thebit.config.js"
+)
+
+const mod = await import(configPath)
+jsConfig = mod.default;
+
+console.log('Unable to load thebit.config.js')
+
 class Config {
   private configData: ConfigData;
 
-  constructor(configPath: string = path.join(import.meta.dirname, '../../config.yaml')) {
-    const rawData = fs.readFileSync(configPath, 'utf-8');
-    this.configData = parse(rawData);
+  constructor() {
 
-    if (Object.keys(this.configData.controllers).length === 0) {
-      throw new Error("No controllers defined in configuration file");
+    if (jsConfig) {
+      this.configData = jsConfig;
+    } else {
+      throw new Error("No config file found. Unable to continue.")
+    }
+
+    if (this.configData) {
+      if (Object.keys(this.configData.controllers).length === 0) {
+        throw new Error("No controllers defined in configuration file");
+      }
     }
   }
 
