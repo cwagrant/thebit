@@ -62,6 +62,7 @@ if (config.controller("ATEM")) {
 
   const atem = new ATEMController();
   atem.connect(process.env.ATEM_IP_ADDRESS);
+  listeners.setupListeners(atem);
 
   app.get("/api/atem", (req: Request, res: Response) => {
     res.json({

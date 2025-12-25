@@ -11,7 +11,9 @@ listeners:
     rules:
       # A rule's function is JS and just needs to return a value
       # either by doing an IIFE or just ensure the final value
-      # returned by the script is the value you wish to use.
+      # of the script is the value you wish to use.
+      # An IIFE is nice as you get to be specific about using
+      # "return" as a keyword.
       - on: "donation:show"
         uid: donationid
         function: |
@@ -29,3 +31,7 @@ listeners:
           else
             return {action: "grow", magnitude}
           })()
+      - on: "donation:hide"
+        uid: donationid
+        function: |
+          {action: "reset"}
