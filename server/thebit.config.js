@@ -1,9 +1,20 @@
+import { loadEnvFile } from "process"
+
+loadEnvFile();
+
 export default {
   controllers: {
     OBS: {
       scenes: [
         {
           name: "TransformGame1",
+          gameSource: "game1",
+          moveTransitionFilterName: "transform",
+          filters: ["spin", "invert", "delay"],
+          sources: ["spotlight", "dvd"]
+        },
+        {
+          name: "TransformGame2",
           gameSource: "game1",
           moveTransitionFilterName: "transform",
           filters: ["spin", "invert", "delay"],
@@ -15,21 +26,22 @@ export default {
   listeners: [
     {
       name: "DonationFaker",
-      listener: "ws",
+      listener: "socketio",
       controller: "obs",
-      address: "http://localhost:8080",
+      address: process.env.DN_ADDRESS,
       options: {
         extraHeaders: {
-          "Authorization": "Bearer abc123"
+          "Authorization": `Bearer ${process.env.DN_ACCESS_TOKEN}`
         },
         auth: {
-          "token": "Bearer abc123"
+          "token": `Bearer ${process.env.DN_ACCESS_TOKEN}`
         }
       },
       rules: [
         {
           on: "donation:show",
           function: ((event) => {
+            console.log('Donation Received', event)
             const uid = event.donationid || event.data?.donationid
             const amount = parseFloat(event.amount || event.data?.amount)
             let magnitude = amount / 100

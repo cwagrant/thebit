@@ -10,6 +10,19 @@ class SocketIOListener extends Listener {
     super(config);
 
     this._socket = io(config.address, config.options)
+    this.socket.on("connect", () => {
+      console.log("Connecting to Socket IO Server: ", this.name)
+    })
+    this.socket.on("connect_error", (err) => {
+      console.log("Connect error", err)
+    })
+    this.socket.on("disconnect", () => {
+      console.log("Disconnected from Socket.IO Server: ", this.name)
+    })
+    this.socket.on("error", (err) => {
+      console.log("Error from Socket.IO Server: ", this.name)
+      console.error(err);
+    })
   }
 
   get socket() {
