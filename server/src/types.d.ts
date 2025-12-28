@@ -15,7 +15,7 @@ interface ListenerConfig {
   listener: string,
   address: string,
   options: any,
-  rules: ListenerRule
+  rules: ListenerRule[]
 }
 
 interface PropAction {
@@ -37,4 +37,9 @@ interface ListenerAction {
   path?: string,
   action: string,
   [key: string]: any
+}[]
+
+interface Config {
+  controllers: Map<string, any>,
+  listeners: Array<ListenerConfig>
 }

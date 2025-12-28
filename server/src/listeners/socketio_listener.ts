@@ -1,17 +1,17 @@
-import { io } from "socket.io-client";
+import { io, Socket } from "socket.io-client";
 import { Listener } from "./base.js";
 import ObsController from "../controllers/obs_controller.js";
 import ATEMController from "../controllers/atem_controller.js";
 
 class SocketIOListener extends Listener {
-  private _socket;
+  private _socket: Socket;
 
   constructor(config: any) {
     super(config);
 
-    this._socket = io(config.address, config.options)
+    this.socket = io(config.address, config.options)
     this.socket.on("connect", () => {
-      console.log("Connecting to Socket IO Server: ", this.name)
+      console.log("Connected to Socket IO Server: ", this.name)
     })
     this.socket.on("connect_error", (err) => {
       console.log("Connect error", err)
@@ -23,6 +23,10 @@ class SocketIOListener extends Listener {
       console.log("Error from Socket.IO Server: ", this.name)
       console.error(err);
     })
+  }
+
+  private set socket(socket: Socket) {
+    this._socket = socket;
   }
 
   get socket() {

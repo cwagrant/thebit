@@ -2,7 +2,7 @@ import express, { Request, Response } from "express";
 import path from "path";
 import ObsController from "./controllers/obs_controller.js"
 import dotenv from "dotenv";
-import { Listeners, SocketIOListener } from "./listeners/index.js"
+import { Listeners } from "./listeners/index.js"
 
 dotenv.config({ path: path.join(process.cwd(), ".env") });
 import config from "./config.js"
@@ -99,10 +99,10 @@ app.get("/api/controllers", (req: Request, res: Response) => {
   res.json(config.controllers);
 })
 
-app.use(express.static(path.join(import.meta.dirname, '..', 'client')));
+app.use(express.static(path.join(import.meta.dirname, 'client')));
 
 app.get('/*', (req, res) => {
-  res.sendFile(path.join(import.meta.dirname, '..', 'client', 'index.html'));
+  res.sendFile(path.join(import.meta.dirname, 'client', 'index.html'));
 });
 
 app.listen(PORT, () => {

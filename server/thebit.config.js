@@ -25,7 +25,7 @@ export default {
   },
   listeners: [
     {
-      name: "DonationFaker",
+      name: "DN",
       listener: "socketio",
       controller: "obs",
       address: process.env.DN_ADDRESS,
@@ -41,24 +41,25 @@ export default {
         {
           on: "donation:show",
           function: ((event) => {
-            console.log('Donation Received', event)
             const uid = event.donationid || event.data?.donationid
             const amount = parseFloat(event.amount || event.data?.amount)
+            const even = parseInt(amount * 100) % 2 == 0
             let magnitude = amount / 100
 
             if (magnitude > 1) {
               magnitude = 1
             }
 
-            if (parseInt(amount * 100) % 2 == 0)
+            if (even) {
+              if (magnitude === 1) {
+                magnitude = 0.9
+              }
               return { uid: uid, action: "shrink", magnitude }
-            else
+            } else
               return { uid: uid, action: "grow", magnitude }
           })
         }
       ]
     }
   ]
-
-
 }

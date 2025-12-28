@@ -1,4 +1,10 @@
-import * as path from 'path';
+import path from "path";
+
+let jsConfig;
+const mod = await import(path.join(process.cwd(), "thebit.config.js"))
+
+jsConfig = mod.default;
+
 
 interface OBSControllerConfig {
   scenes: SceneConfig[];
@@ -22,17 +28,6 @@ interface ConfigData {
     ATEM?: ATEMControllerConfig;
   }
   listeners: ListenerConfig[];
-}
-
-let jsConfig: ConfigData;
-
-const configPath = path.join(process.cwd(), "thebit.config.js")
-
-const mod = await import(configPath)
-jsConfig = mod.default;
-
-if (!jsConfig) {
-  throw new Error('Unable to load thebit.config.js')
 }
 
 class Config {

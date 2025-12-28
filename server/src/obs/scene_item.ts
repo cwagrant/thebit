@@ -66,7 +66,6 @@ class SceneItem {
     this.defaultScale = state.defaultScale
     this.alignment = state.alignment
     this.defaultAlignment = state.defaultAlignment
-    console.log(this.toJSON())
   }
 
   // Destructive action that returns the list of commands

@@ -14,6 +14,7 @@ export default class ObsController extends Controller {
   gameSceneItemNamePrefix = 'game';
   password: string | undefined;
   config: any = cfg.controller("OBS")
+  actionQueue: ListenerAction[] = [];
 
   constructor(url: string, password?: string) {
     super()
@@ -242,5 +243,53 @@ export default class ObsController extends Controller {
     if (requests.length > 0) {
       await this.obs.callBatch(requests);
     }
+  }
+
+  queueAction(action: ListenerAction): void {
+    this.actionQueue.push(action);
+  }
+
+  callAction(listenerAction: ListenerAction, sceneName: string | undefined = undefined): void {
+    let { path, action, uid, ...props } = listenerAction;
+    path = path || sceneName;
+
+    if (!path)
+      return
+
+    const scene = this.getScene(path)
+
+    if (!scene)
+      return
+
+    const actionFunc: any = (scene as any)[action];
+
+    if (typeof actionFunc === "function") {
+      actionFunc.apply(scene, [props]);
+    }
+  }
+
+  startQueue() {
+    setInterval(() => {
+      const action = this.actionQueue.shift();
+
+      if (!action)
+        return
+
+      if (!action.path) {
+        this.scenes.forEach((scene) => {
+          this.callAction(action, scene.name)
+        })
+      } else {
+        this.callAction(action);
+      }
+
+      // Need to generate list of requests from all scenes
+      // and send in one obs.callBatch call, then dump state
+      //
+      // Will need to test how well movetransition handles being
+      // ran simultaneously on multiple scenes.
+
+      console.log('Executing Queue Action: ', action)
+    }, 300)
   }
 }
