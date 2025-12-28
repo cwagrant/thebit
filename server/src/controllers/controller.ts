@@ -6,6 +6,7 @@ abstract class Controller implements IController {
   abstract reset(): boolean
   abstract stop(): boolean
   abstract action(...args: any): void
+  abstract getNormalizedState(): Map<string, IState> | null
 }
 
 export { Controller }

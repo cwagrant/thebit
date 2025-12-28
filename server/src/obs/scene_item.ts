@@ -115,13 +115,13 @@ class SceneItem {
     }
 
     this.currentSize = {
-      height: this.defaultHeight() * this.scaleX(),
-      width: this.defaultWidth() * this.scaleY(),
+      height: this.defaultHeight() * this.scaleX,
+      width: this.defaultWidth() * this.scaleY,
     }
   }
 
   adjustSize(magnitude: number): void {
-    const newScale = this.scaleX() * magnitude;
+    const newScale = this.scaleX * magnitude;
     console.log('newScale', newScale)
     this.scale(newScale)
   }
@@ -162,11 +162,11 @@ class SceneItem {
     return this.defaultScale["y"];
   }
 
-  scaleX(): number {
+  get scaleX(): number {
     return this.currentScale["x"];
   }
 
-  scaleY(): number {
+  get scaleY(): number {
     return this.currentScale["y"];
   }
 

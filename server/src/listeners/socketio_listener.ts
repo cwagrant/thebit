@@ -32,7 +32,7 @@ class SocketIOListener extends Listener {
   parseRules(controller: IController): void {
     this.rules.forEach((rule) => {
       this.socket.on(rule.on, (args: any) => {
-        const listenerAction: ListenerAction = this.execRule(rule, args);
+        const listenerAction: ListenerAction = this.execRule(rule, args, controller);
         console.debug('listenerAction', listenerAction)
 
         if (this.checkHistory(listenerAction.uid)) {

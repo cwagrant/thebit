@@ -3,6 +3,13 @@ interface IController {
   active: boolean;
 
   action: Function;
+  getNormalizedState: Function;
+}
+
+interface IState {
+  name: string;
+  scaleX: number;
+  scaleY: number;
 }
 
 type ListenerRule = {

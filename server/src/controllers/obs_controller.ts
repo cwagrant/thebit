@@ -221,6 +221,20 @@ export default class ObsController extends Controller {
     }
   }
 
+  getNormalizedState(): Map<string, IState> {
+    let state: Map<string, IState> = new Map();
+
+    this.scenes.forEach((scene, name) => {
+      state.set(name, {
+        name: name,
+        scaleX: scene?.sceneItem?.scaleX,
+        scaleY: scene?.sceneItem?.scaleY
+      })
+    })
+
+    return state
+  }
+
   async send(sceneName: string) {
     const scene = this.scenes.get(sceneName);
 

@@ -40,8 +40,8 @@ export default {
       rules: [
         {
           on: "donation:show",
-          function: ((event) => {
-            console.log('Donation Received', event)
+          function: ((event, state) => {
+            console.log('State', state)
             const uid = event.donationid || event.data?.donationid
             const amount = parseFloat(event.amount || event.data?.amount)
             let magnitude = amount / 100

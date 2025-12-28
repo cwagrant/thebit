@@ -63,6 +63,10 @@ export default class ATEMController extends Controller {
     return actions;
   }
 
+  getNormalizedState(): null {
+    return null;
+  }
+
   action(action: string, path: string[], props: any): void {
     const me = path.shift();
     if (!me) return;

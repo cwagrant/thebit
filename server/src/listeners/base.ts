@@ -1,4 +1,4 @@
-import { VM, VMScript } from "vm2";
+import { VM } from "vm2";
 
 abstract class Listener {
   private _name: string;
@@ -43,17 +43,25 @@ abstract class Listener {
     return this._rules;
   }
 
-  execRule(rule: ListenerRule, event: any): any {
+  execRule(rule: ListenerRule, event: any, controller: IController): any {
     try {
+      let normalizedState: Map<string, IState> | null = null;
+      try {
+        normalizedState = controller.getNormalizedState()
+      } catch (err) {
+        console.error("Failed to get state from controller", typeof controller)
+      }
+
       let sandbox = {
         event: event,
-        ruleFunc: rule.function
+        ruleFunc: rule.function,
+        state: normalizedState
       };
 
       console.log("Executing rule in listener", this.name, "with event:", event);
       const vm = new VM({ sandbox });
 
-      return vm.run(`ruleFunc(event);`);
+      return vm.run(`ruleFunc(event, state);`);
     } catch (err: any) {
       console.log(`Error executing rule in listener '${this.name}' :`, err);
     }
