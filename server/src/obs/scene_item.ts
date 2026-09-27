@@ -13,7 +13,7 @@ type SceneItemProps = {
   defaultAlignment: Alignment;
   maxScale?: number;
   minScale?: number;
-}
+};
 
 // This is based on OBS's alignments.
 enum Alignment {

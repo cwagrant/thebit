@@ -7,3 +7,4 @@ config.json
 *.zip
 listeners.yaml
 config.yaml
+*.sqlite*

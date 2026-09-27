@@ -1,37 +1,5 @@
 import { SocketIOListener } from "./socketio_listener.js";
 import { WSListener } from "./ws_listener.js";
+import { Listener } from "./listener.js";
 
-class Listeners {
-  private _configs: ListenerConfig[];
-  private _listeners: Map<string, any> = new Map();
-
-  constructor(configs: ListenerConfig[]) {
-    this._configs = configs;
-  }
-
-  get configs(): ListenerConfig[] {
-    return this._configs;
-  }
-
-  get listeners(): Map<string, any> {
-    return this._listeners;
-  }
-
-  // TODO need to look at validating that a listener is setup for the
-  // correct controller as indicated in the config.
-  setupListeners(controller: IController): void {
-    this.configs.forEach((cfg: ListenerConfig) => {
-      if (cfg.listener == "socketio") {
-        const listener = new SocketIOListener(cfg);
-        listener.parseRules(controller);
-        this._listeners.set(listener.name, listener);
-      } else if (cfg.listener == "ws") {
-        const listener = new WSListener(cfg);
-        listener.parseRules(controller);
-        this._listeners.set(listener.name, listener);
-      }
-    })
-  }
-}
-
-export { Listeners, SocketIOListener }
+export { Listener, WSListener, SocketIOListener };

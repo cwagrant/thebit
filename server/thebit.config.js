@@ -3,8 +3,13 @@ import { loadEnvFile } from "process"
 loadEnvFile();
 
 export default {
-  controllers: {
-    OBS: {
+  controllerPlugins: [],
+  listenerPlugins: [],
+  controllers: [
+    {
+      id: 1,
+      name: "OBS",
+      kind: "obs",
       scenes: [
         {
           name: "TransformGame1",
@@ -25,7 +30,7 @@ export default {
         }
       ]
     }
-  },
+  ],
   listeners: [
     {
       name: "DonationFaker",

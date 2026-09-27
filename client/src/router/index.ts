@@ -1,5 +1,5 @@
-import { createRouter, createWebHistory } from 'vue-router'
-import ControllerView from '@/views/ControllerView.vue'
+import { createRouter, createWebHistory } from 'vue-router';
+import ControllerView from '@/views/ControllerView.vue';
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -14,7 +14,22 @@ const router = createRouter({
       name: 'about',
       component: () => import('../views/AboutView.vue'),
     },
+    {
+      path: '/listeners',
+      name: 'ListenerIndex',
+      component: () => import('../views/ListenersIndex.vue'),
+    },
+    {
+      path: '/listeners/new',
+      name: 'ListenerNew',
+      component: () => import('../views/NewListenerView.vue'),
+    },
+    {
+      path: '/listeners/:id',
+      name: 'ListenerView',
+      component: () => import('../views/ListenerView.vue'),
+    }
   ],
-})
+});
 
-export default router
+export default router;

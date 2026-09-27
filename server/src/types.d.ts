@@ -1,21 +1,41 @@
 interface IController {
-  id: string;
+  id: number;
+  name: string;
+  kind: string;
+  options: any;
   active: boolean;
-
   action: Function;
 }
 
-type ListenerRule = {
-  on: string,
-  function: Function
+interface IListener {
+  id: number;
+  name: string;
+  kind: string;
+  options: any;
+  vm: Isolate;
+  active: number;
+}
+
+interface IHistory {
+  id: number;
+  listener_id: number;
+  key: string;
+}
+
+interface IListenerRule {
+  id: number,
+  listener_id: number,
+  message: string,
+  rule: string | Script,
+  active: number;
+  script?: string;
 }
 
 interface ListenerConfig {
+  id: number,
   name: string,
-  listener: string,
-  address: string,
-  options: any,
-  rules: ListenerRule
+  kind: string,
+  options: { [key: string]: string | number | undefined },
 }
 
 interface PropAction {
@@ -36,5 +56,6 @@ interface ListenerAction {
   uid?: string,
   path?: string,
   action: string,
+  controller: string,
   [key: string]: any
 }

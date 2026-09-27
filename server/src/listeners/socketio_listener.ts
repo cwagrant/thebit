@@ -1,91 +1,64 @@
 import { io } from "socket.io-client";
-import { Listener } from "./base.js";
-import ObsController from "../controllers/obs_controller.js";
-import ATEMController from "../controllers/atem_controller.js";
+import { Listener } from "./listener.js";
+import type Matrix from "../matrix.js";
 
 class SocketIOListener extends Listener {
-  private _socket;
+  private _socket: any;
 
-  constructor(config: any) {
-    super(config);
+  constructor(matrix: Matrix, config: any) {
+    super(matrix, config);
 
-    this._socket = io(config.address, config.options)
+    this.start();
+  }
+
+  start(): void {
+    if (!this.active)
+      return;
+
+    const { address, options } = this.options;
+    this._socket = io(address, options);
+
     this.socket.on("connect", () => {
-      console.log("Connecting to Socket IO Server: ", this.name)
-    })
-    this.socket.on("connect_error", (err) => {
-      console.log("Connect error", err)
-    })
+      console.log("Connected to Socket IO Server: ", this.name);
+    });
+    this.socket.on("connect_error", (err: any) => {
+      console.log("Connect error", err);
+    });
     this.socket.on("disconnect", () => {
-      console.log("Disconnected from Socket.IO Server: ", this.name)
-    })
-    this.socket.on("error", (err) => {
-      console.log("Error from Socket.IO Server: ", this.name)
+      console.log("Disconnected from Socket.IO Server: ", this.name);
+    });
+    this.socket.on("error", (err: any) => {
+      console.log("Error from Socket.IO Server: ", this.name);
       console.error(err);
-    })
+    });
+
+    this.loadRules();
+  }
+
+  stop(): void {
+    console.log('Stopping SocketIOListener', this.name);
+    this._socket.disconnect();
   }
 
   get socket() {
     return this._socket;
   }
 
-  parseRules(controller: IController): void {
+  parseRules(): void {
     this.rules.forEach((rule) => {
-      this.socket.on(rule.on, (args: any) => {
-        const executionResult: ListenerAction | ListenerAction[] = this.execRule(rule, args);
-        const listenerActions = Array.isArray(executionResult) ? executionResult : [executionResult];
-        
-        listenerActions.forEach((listenerAction) => {
-          console.debug('listenerAction', listenerAction)
+      this.socket.on(rule.message, (args: any) => {
+        try {
+          const executionResult: ListenerAction | ListenerAction[] = this.execRule(rule, args);
+          const listenerActions = Array.isArray(executionResult) ? executionResult : [executionResult];
 
-          if (this.checkHistory(listenerAction.uid)) {
-            console.debug(`Duplicate event received for uid ${listenerAction.uid}, ignoring.`)
-            return;
-          }
-
-          if (controller instanceof ObsController) {
-            try {
-              let { action, path, ...props } = listenerAction
-              if (!action) {
-                return;
-              }
-
-              if (!path) {
-                controller.scenes.forEach((scene) => {
-                  controller.action(action, scene.name, props);
-                })
-              } else {
-                controller.action(action, path, props);
-              }
-            }
-            catch (err: any) {
-              console.error("Error executing listener action:", err)
-            }
-          } else if (controller instanceof ATEMController) {
-            try {
-              let { action, path, ...args } = listenerAction
-
-              if (!action) {
-                return
-              }
-
-              if (typeof path !== "string") {
-                throw new Error("ATEM Listener action requires a valid 'path' string.")
-              }
-
-              if (typeof action !== "string") {
-                throw new Error("ATEM Listener action requires a valid 'action' string.")
-              }
-
-              controller.action(action, path.split("."), args);
-            } catch (err: any) {
-              console.error("Error executing listener action:", err)
-            }
-          }
-        });
-      })
-    })
+          this.callActions(listenerActions);
+        } catch (err: any) {
+          console.error('Error executing rule', rule.id, err);
+        }
+      });
+    });
   }
 }
 
-export { SocketIOListener }
+export default SocketIOListener;
+export { SocketIOListener };

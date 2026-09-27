@@ -28,6 +28,10 @@ export default class Client {
     this.bindWebSocketEvents();
   }
 
+  close(): void {
+    this.ws.close();
+  }
+
   on(eventName: string, callback: Function): void {
     this.events.set(eventName, this.events.get(eventName) || []);
     this.events.get(eventName)?.push(callback);
@@ -37,7 +41,7 @@ export default class Client {
     this.events.set(eventName, this.events.get(eventName) || []);
     this.events.get(eventName)?.filter((cb) => {
       return cb !== callback;
-    })
+    });
   }
 
   emit(eventName: string, data: JSON): boolean {
@@ -45,11 +49,11 @@ export default class Client {
       this.ws.send(JSON.stringify({
         event: eventName,
         data: data
-      }))
+      }));
       return true;
     } catch (error) {
-      console.error('Client Failure: Failed to send message.')
-      console.error(`Event: ${eventName}, Data: ${data}`)
+      console.error('Client Failure: Failed to send message.');
+      console.error(`Event: ${eventName}, Data: ${data}`);
       console.debug(error);
       return false;
     }
@@ -65,14 +69,14 @@ export default class Client {
             : socket_event;
 
           if (this.events.has(received_event)) {
-            const handlers = this.events.get(received_event) || []
+            const handlers = this.events.get(received_event) || [];
 
             for (const handler of handlers) {
               handler(data);
             }
           }
         } catch (err) {
-          console.error("Error handling Websocket Event:", err)
+          console.error("Error handling Websocket Event:", err);
         }
       });
     }
@@ -80,16 +84,16 @@ export default class Client {
 
   bindConnectionEvents(): void {
     this.on("close", () => {
-      const intervalTime = this.connectionAttempts * 1000
-      const reconnectWait = intervalTime > 10000 ? 10000 : intervalTime
+      const intervalTime = this.connectionAttempts * 1000;
+      const reconnectWait = intervalTime > 10000 ? 10000 : intervalTime;
 
       if (this.connectionAttempts === 1) {
-        console.debug('Client Connection Closed')
+        console.debug('Client Connection Closed');
       }
 
       setTimeout(() => {
         if (this.connectionAttempts < 6) {
-          console.debug(`Client Reconnection Attempt ${this.connectionAttempts}`)
+          console.debug(`Client Reconnection Attempt ${this.connectionAttempts}`);
         }
         this.connectionAttempts = this.connectionAttempts + 1;
         this.ws = new WebSocket(this.url);

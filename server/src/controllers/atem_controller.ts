@@ -1,13 +1,14 @@
-import { Controller } from "./controller.js"
+import Controller from "./controller.js";
 import { Atem, AtemState } from 'atem-connection';
 import { MixEffectsBus } from "../atem/mix_effects_bus.js";
+import Matrix from "../matrix.js";
 
 export default class ATEMController extends Controller {
   atem: Atem;
   mixEffectsBuses: { [key: string]: MixEffectsBus } = {};
 
-  constructor() {
-    super();
+  constructor(config: IController) {
+    super(config);
 
     this.atem = new Atem();
     this.atem.on('info', console.log);
@@ -15,7 +16,7 @@ export default class ATEMController extends Controller {
     this.atem.on('connected', () => {
       console.log('ATEM connected');
 
-      let state = this.atem.state;
+      const state = this.atem.state;
       if (state) {
         this._loadAtemState(state);
       }
@@ -56,7 +57,7 @@ export default class ATEMController extends Controller {
   getActions(): Actions {
     const actions: Actions = {};
 
-    for (let [key, value] of Object.entries(this.mixEffectsBuses)) {
+    for (const [key, value] of Object.entries(this.mixEffectsBuses)) {
       actions[key] = value.getActions();
     }
 

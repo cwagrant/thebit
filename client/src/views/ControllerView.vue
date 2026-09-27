@@ -3,7 +3,7 @@
   import {ref, onMounted} from "vue";
 
   const isLoading = ref(true);
-  let controllers = ref<string[]>([]);
+  let controllers = ref([]);
 
   const fetchControllers = async() => {
     const response = await fetch("/api/controllers")
@@ -22,7 +22,7 @@
 <template>
   <main>
     <template v-for="controller in controllers">
-      <InterfaceView :title="controller.toUpperCase()" :controller="controller" />
+      <InterfaceView :title="controller.name.toUpperCase()" :controller="controller" />
     </template>
   </main>
 </template>
