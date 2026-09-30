@@ -43,6 +43,12 @@ abstract class Listener implements IListener {
     };
   }
 
+  // Live connection state, surfaced on the listeners page. Listeners with
+  // nothing to connect to (e.g. manual) keep this default.
+  get status(): ListenerStatus {
+    return { state: this.active ? "running" : "disabled" };
+  }
+
   abstract parseRules(...args: any): void;
   abstract start(): void;
   abstract stop(): void;
@@ -58,12 +64,14 @@ abstract class Listener implements IListener {
       WHERE id=?
     `).run(this.name, this.kind, JSON.stringify(this.options), this.id);
 
-    return (result.lastInsertRowid || 0) > 0;
+    return result.changes > 0;
   }
 
   loadRules(): void {
     const rows = db.prepare("SELECT * FROM listener_rules WHERE listener_id = ?")
       .all(this.id) as IListenerRule[];
+
+    this._rules.clear();
 
     rows.forEach((row) => {
       this._rules.set(row.id, new ListenerRule(this, row));

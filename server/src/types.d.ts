@@ -29,6 +29,17 @@ interface IListenerRule {
   rule: string | Script,
   active: number;
   script?: string;
+  version?: string | null;
+  condition?: string | { [key: string]: any } | null;
+}
+
+// "stopped": the listener is enabled but isn't running at all, e.g. its
+// constructor threw on missing options (see Matrix.listenerErrors).
+type ListenerState = "connected" | "connecting" | "disconnected" | "running" | "disabled" | "stopped";
+
+interface ListenerStatus {
+  state: ListenerState;
+  error?: string;
 }
 
 interface ListenerConfig {

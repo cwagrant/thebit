@@ -9,8 +9,9 @@
   const emit = defineEmits(['rule:updated', 'rule:deleted']);
 
   import { inject, ref } from 'vue';
+  import { editorKey } from '@/editor';
 
-  const { toggleEditor, setContent, onContentUpdate, setLanguage} = inject("editor");
+  const { toggleEditor, setContent, onContentUpdate, setLanguage} = inject(editorKey)!;
   const showModal = ref(false);
   const ruleProp = ref(props.rule);
   const exists = ref(!!props.rule.id)
@@ -19,7 +20,7 @@
     toggleEditor(true);
     setLanguage("javascript");
     setContent(ruleProp.value.rule);
-    onContentUpdate((newContent) => {
+    onContentUpdate((newContent: string) => {
       ruleProp.value.rule = newContent
     })
   })

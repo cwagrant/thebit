@@ -1,33 +1,48 @@
 <script setup lang="ts">
-  import type { Actions } from '../action.js';
+  import { computed } from 'vue';
+  import type { Actions } from '@/action';
   import ActionsView from './ActionsView.vue';
   import ActionView from './ActionView.vue';
-  
-  const { pathComponent, path } = defineProps<{
+
+  const props = defineProps<{
     path: string[],
     pathComponent?: string,
     title: string,
     actions: Actions,
-    controller: "obs" | "atem";
+    controller: string,
   }>();
 
-  let fullPath = Array.from(path);
-  if (pathComponent) {
-    fullPath.push(pathComponent);
-  }
+  const fullPath = computed(() => props.pathComponent ? [...props.path, props.pathComponent] : props.path);
 </script>
+
 <template>
   <div>
     <p>{{ title }}</p>
     <div v-if="Array.isArray(actions)">
-      <div v-for="action in actions">
-        <ActionView :action="action" :path-component="title" :path="fullPath" :controller="controller" />
+      <div
+        v-for="(action, index) in actions"
+        :key="index"
+      >
+        <ActionView
+          :action="action"
+          :path="fullPath"
+          :controller="controller"
+        />
       </div>
     </div>
     <div v-else-if="typeof actions === 'object'">
-      <div v-for="(mapping, title) in actions">
-        <ActionsView :title="title" :path-component="title" :actions="mapping" :path="fullPath" :controller="controller" />
+      <div
+        v-for="(mapping, childTitle) in actions"
+        :key="childTitle"
+      >
+        <ActionsView
+          :title="String(childTitle)"
+          :path-component="String(childTitle)"
+          :actions="mapping"
+          :path="fullPath"
+          :controller="controller"
+        />
       </div>
-    </div>        
+    </div>
   </div>
 </template>

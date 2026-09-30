@@ -35,6 +35,17 @@ class SocketIOListener extends Listener {
     this.loadRules();
   }
 
+  get status(): ListenerStatus {
+    if (!this.active)
+      return { state: "disabled" };
+
+    if (this._socket?.connected)
+      return { state: "connected" };
+
+    // socket.io-client keeps retrying on its own while `active` is true.
+    return { state: this._socket?.active ? "connecting" : "disconnected" };
+  }
+
   stop(): void {
     console.log('Stopping SocketIOListener', this.name);
     this._socket.disconnect();
@@ -49,7 +60,7 @@ class SocketIOListener extends Listener {
       this.socket.on(rule.message, (args: any) => {
         try {
           const executionResult: ListenerAction | ListenerAction[] = this.execRule(rule, args);
-          const listenerActions = Array.isArray(executionResult) ? executionResult : [executionResult];
+          const listenerActions = (Array.isArray(executionResult) ? executionResult : [executionResult]).filter(Boolean);
 
           this.callActions(listenerActions);
         } catch (err: any) {

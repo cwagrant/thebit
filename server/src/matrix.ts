@@ -16,11 +16,15 @@ export default class Matrix {
   _controllers: Map<string, Controller> = new Map();
   _listeners: Map<string, Listener> = new Map();
   _available_listeners: Map<string, ListenerConstructor> = new Map();
+  // Why an enabled listener failed to start, by listener id - so the
+  // listeners page can say more than just "not running".
+  _listener_errors: Map<number, string> = new Map();
   _available_controllers: Map<string, ControllerConstructor> = new Map();
 
   get listeners() { return this._listeners; }
   get controllers() { return this._controllers; }
   get availableListeners() { return this._available_listeners; }
+  get listenerErrors() { return this._listener_errors; }
   get availableControllers() { return this._available_controllers; }
 
   async start() {
@@ -31,20 +35,82 @@ export default class Matrix {
     this.loadListeners();
   }
 
-  stopListener(id: number): void {
+  // Fully recreates the listener from its current DB row rather than
+  // restarting the existing instance in place, for the same reason as
+  // reloadController below. Disabled (active=0) rows are stopped and left
+  // uninstantiated rather than immediately reconstructed - a disabled
+  // listener should not hold a live connection or attempt to reconnect.
+  async reloadListener(id: number): Promise<Listener | undefined> {
     const listener = this.listeners.values().find((listener) => listener.id === id);
 
     if (listener) {
-      listener.stop();
+      try {
+        listener.stop();
+      } catch (err) {
+        console.error('Error stopping listener', listener.name, err);
+      }
+
+      this.listeners.delete(listener.name);
     }
+
+    const row = await knex("listeners").where('id', id).first();
+
+    if (!row) {
+      throw new Error(`Listener ${id} not found`);
+    }
+
+    if (!row.active) {
+      return undefined;
+    }
+
+    row.options = JSON.parse(row.options);
+
+    this._listener_errors.delete(id);
+
+    let newListener: Listener;
+
+    try {
+      newListener = this.createListener(row);
+    } catch (err: any) {
+      this._listener_errors.set(id, err?.message || String(err));
+      throw err;
+    }
+
+    this.listeners.set(newListener.name, newListener);
+
+    return newListener;
   }
 
-  startListener(id: number): void {
-    const listener = this.listeners.values().find((listener) => listener.id === id);
+  // Like reloadListener above, fully recreates from the current DB row
+  // rather than restarting the existing instance in place, since a
+  // controller's options (e.g. an OBS address/password) are read once in
+  // its constructor. Controllers don't yet have an enable/disable concept,
+  // so unlike reloadListener this always (re)constructs.
+  async reloadController(id: number): Promise<Controller> {
+    const controller = this.controllers.values().find((controller) => controller.id === id);
 
-    if (listener) {
-      listener.start();
+    if (controller) {
+      try {
+        controller.stop();
+      } catch (err) {
+        console.error('Error stopping controller', controller.name, err);
+      }
+
+      this.controllers.delete(controller.name);
     }
+
+    const row = await knex("controllers").where('id', id).first();
+
+    if (!row) {
+      throw new Error(`Controller ${id} not found`);
+    }
+
+    row.options = JSON.parse(row.options);
+
+    const newController = this.createController(row);
+    this.controllers.set(newController.name, newController);
+
+    return newController;
   }
 
   async loadControllerPlugins(): Promise<void> {
@@ -129,13 +195,18 @@ export default class Matrix {
     const rows = db.prepare("SELECT * FROM listeners").all() as IListener[];
 
     rows.forEach((row) => {
+      if (!row.active) {
+        return;
+      }
+
       row.options = JSON.parse(row.options);
       try {
         this._listeners.set(
           row.name,
           this.createListener(row)
         );
-      } catch (err) {
+      } catch (err: any) {
+        this._listener_errors.set(row.id, err?.message || String(err));
         console.error('Error loading listener', row.name, err);
       }
     });

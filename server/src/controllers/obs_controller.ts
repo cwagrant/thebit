@@ -25,7 +25,9 @@ export default class ObsController extends Controller {
     this.configScenes = scenes;
     this.bindConnectionEvents();
     this.bindStartupEvents();
-    this.obs.connect(this.url, this.password);
+    this.obs.connect(this.url, this.password).catch((err: any) => {
+      console.error("OBS Error: Failed to connect:", err);
+    });
   }
 
   static get kind(): string {
@@ -81,20 +83,28 @@ export default class ObsController extends Controller {
       const intervalTime = this.connectionAttempts * 1000;
       const reconnectWait = intervalTime > 10000 ? 10000 : intervalTime;
 
-      if (this.connectionAttempts === 1) {
+      if (this.connectionAttempts === 0) {
         console.debug('OBS Connection Closed');
       }
 
       setTimeout(async () => {
         this.connectionAttempts = this.connectionAttempts + 1;
         console.debug(`OBS Reconnection Attempt ${this.connectionAttempts}`);
-        try { await this.obs.connect(this.url); } catch { }
+        try { await this.obs.connect(this.url, this.password); } catch { }
       }, reconnectWait);
     });
 
     this.obs.on("ConnectionOpened", () => {
-      this.connectionAttempts = 1;
       console.debug("OBS Connection Opened");
+    });
+
+    // Only reset the attempt counter once OBS has actually accepted us.
+    // ConnectionOpened fires as soon as the socket opens, before auth - a
+    // bad password would otherwise reset the counter (and the backoff) on
+    // every single attempt.
+    this.obs.on("Identified", () => {
+      this.connectionAttempts = 0;
+      console.debug("OBS Connection Identified");
     });
   }
 
@@ -198,12 +208,10 @@ export default class ObsController extends Controller {
     }).then((response: any) => response.filters);
   }
 
-  getActions(): Map<string, Action[]> {
-    const actions = new Map<string, Action[]>(
+  getActions(): Actions {
+    return Object.fromEntries(
       this.scenes.values().map((scene: Scene) => [scene.name, scene.getActions()])
     );
-
-    return actions;
   }
 
   action(action: string, sceneName: string, props: any): void {
@@ -214,6 +222,10 @@ export default class ObsController extends Controller {
       return;
     }
 
+    if (!scene.getSceneItem()) {
+      console.error(`Scene '${sceneName}' has no scene item set - its configured gameSource wasn't found as a source in OBS when scenes were loaded (check the controller's 'scenes' config against the actual source names in that OBS scene). Ignoring action '${action}'.`);
+      return;
+    }
 
     console.log('action', action, sceneName, props);
 

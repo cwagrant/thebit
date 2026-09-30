@@ -1,26 +1,33 @@
 <script setup lang="ts">
-  import { ref, inject, computed } from "vue";
+  import { ref, inject, computed, watch, onMounted } from "vue";
   import { editorKey } from '@/editor';
-  import { useRouter } from 'vue-router';
+  import { useRoute } from 'vue-router';
 
-  type Listener = {
+  type Controller = {
     id: number;
     name: string;
-    active: number;
     kind: string;
     options: object;
   }
 
-  const listener = ref<Omit<Listener, "id">>({name: "", kind: "", options: {address: "", options:""}, active: 1});
-  const { toggleEditor, setContent, onContentUpdate, setLanguage} = inject(editorKey)!;
-  const listenerKinds = inject("listenerKinds");
-  const router = useRouter();
+  const controller = ref<Controller>({ id: 0, name: "", kind: "", options: {} });
+  const { toggleEditor, setContent, onContentUpdate, setLanguage } = inject(editorKey)!;
+  const controllerKinds = inject("controllerKinds");
+
+  const route = useRoute();
+
+  watch(
+    () => route.params.id,
+    () => {
+      fetchController();
+    }
+  )
 
   const computedOptions = computed({
-    get: () => JSON.stringify(listener.value.options, null, 2),
+    get: () => JSON.stringify(controller.value.options, null, 2),
     set: (val: string) => {
       try {
-        listener.value.options= JSON.parse(val);
+        controller.value.options = JSON.parse(val);
       } catch {
       }
     }
@@ -32,52 +39,69 @@
     setContent(computedOptions.value);
     onContentUpdate((newContent: string) => {
       computedOptions.value = newContent;
+      updateController();
     });
   }
 
-  const saveListener = () => {
-    const { name, kind, active } = listener.value
-    console.log('newValue', listener.value)
+  const updateController = () => {
+    const { id, name, kind } = controller.value;
 
-    fetch(`/api/listeners`, {
-      method: "POST",
+    fetch(`/api/controllers/${id}`, {
+      method: "PUT",
       headers: {
-      "Content-Type": "application/json"
+        "Content-Type": "application/json"
       },
       body: JSON.stringify({
         name: name,
         kind: kind,
-        options: computedOptions.value,
-        active: active
+        options: computedOptions.value
       })
     }).then((response) => {
-      if(!response.ok) {
-        console.error("Failed to update rule");
-      } else {
-        router.push('/listeners');
+      if (!response.ok) {
+        console.error("Failed to update controller");
       }
     })
   }
+
+  const fetchController = () => {
+    const { id } = route.params;
+
+    if (!id)
+      return;
+
+    fetch(`/api/controllers/${id}`)
+      .then((response) => response.json())
+      .then((data) => {
+        controller.value = data;
+      });
+  }
+
+  onMounted(() => {
+    fetchController();
+  });
 </script>
 
 <template>
-  <h1 class="is-size-2">
-    New Listener
-  </h1>
-  <form
-    class="block"
-    @submit.prevent="saveListener"
-  >
+  <div class="block">
+    <div class="buttons">
+      <RouterLink
+        to="/"
+        class="button is-info"
+      >
+        Back
+      </RouterLink>
+    </div>
+  </div>
+  <form class="block">
     <label
       class="label"
       for="name"
     >Name</label>
     <input
       id="name"
-      v-model="listener.name"
+      v-model="controller.name"
       class="input"
       type="text"
-      required
     >
 
     <div class="field">
@@ -88,30 +112,17 @@
       <div class="control">
         <select
           id="kind"
-          v-model="listener.kind"
           class="input"
-          required
+          :value="controller.kind"
         >
           <option
-            v-for="kind in listenerKinds"
+            v-for="kind in controllerKinds"
             :key="kind"
             :value="kind"
           >
             {{ kind }}
           </option>
         </select>
-      </div>
-    </div>
-
-    <div class="field">
-      <label class="label">Active</label>
-      <div class="control">
-        <input
-          v-model="listener.active"
-          type="checkbox"
-          true-value="1"
-          false-value="0"
-        >
       </div>
     </div>
 
@@ -131,16 +142,10 @@
       </div>
     </div>
     <button
-      type="submit"
       class="button mt-2 is-primary"
+      @click.prevent="updateController"
     >
       Save
     </button>
   </form>
 </template>
-
-<style scoped>
-  .json-editor {
-    height: 18rem;
-  }
-</style>

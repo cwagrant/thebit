@@ -15,7 +15,7 @@
   import { ref, onMounted } from 'vue';
   import { CodeEditor } from 'monaco-editor-vue3';
 
-  const editor = ref(null);
+  const editor = ref<unknown>(null);
   const localContent = ref("");
   const isActive = ref(false);
   const editorOptions = {
@@ -25,8 +25,8 @@
   }
 
   const lifecycleHooks = {
-    onCreated: (editor) => {
-      editor.value = editor
+    onCreated: (instance: unknown) => {
+      editor.value = instance
     }
   }
 

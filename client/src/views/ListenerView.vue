@@ -1,5 +1,6 @@
 <script setup lang="ts">
   import { ref, inject, computed, watch, onMounted} from "vue";
+  import { editorKey } from '@/editor';
   import { useRoute } from 'vue-router';
   import ListenerRules from '@/components/ListenerRules.vue';
   import ListenerRule from '@/components/ListenerRule.vue';
@@ -12,8 +13,8 @@
     options: object;
   }
 
-  const listener = ref<Listener>({name: "", kind: "", options: "", active: 1});
-  const { toggleEditor, setContent, onContentUpdate, setLanguage} = inject("editor");
+  const listener = ref<Listener>({id: 0, name: "", kind: "", options: {}, active: 1});
+  const { toggleEditor, setContent, onContentUpdate, setLanguage} = inject(editorKey)!;
   const listenerKinds = inject("listenerKinds");
 
   const route = useRoute();
@@ -39,7 +40,7 @@
     toggleEditor(true);
     setLanguage("json");
     setContent(computedOptions.value);
-    onContentUpdate((newContent) => {
+    onContentUpdate((newContent: string) => {
       computedOptions.value = newContent;
       updateListener();
     });
@@ -66,10 +67,22 @@
     })
   }
 
+  const twitchScope = ref("user:read:chat user:bot");
+
+  const twitchAuthorizeUrl = computed(() => {
+    return `/oauth/twitch/authorize?listenerId=${listener.value.id}&scope=${encodeURIComponent(twitchScope.value)}`;
+  });
+
+  const twitchTokenExpiresAt = computed(() => {
+    const expiresAt = (listener.value.options as any)?.accessTokenExpiresAt;
+
+    return expiresAt ? new Date(expiresAt) : null;
+  });
+
   const fetchListener = () => {
     const { id } = route.params;
 
-    if(id === 0)
+    if(!id)
       return
 
     fetch(`/api/listeners/${id}`)
@@ -162,6 +175,54 @@
     >
       Save
     </button>
+
+    <div
+      v-if="listener.kind === 'twitch-eventsub'"
+      class="block mt-4"
+    >
+      <h2 class="is-size-4">
+        Twitch Authorization
+      </h2>
+      <p v-if="twitchTokenExpiresAt">
+        Current access token expires {{ twitchTokenExpiresAt.toLocaleString() }}.
+      </p>
+      <p v-else>
+        Not yet authorized (or using a token with no known expiry, e.g. a manually-set app access token).
+      </p>
+      <div class="field">
+        <label
+          class="label"
+          for="twitch-scope"
+        >Scope</label>
+        <div class="control">
+          <input
+            id="twitch-scope"
+            v-model="twitchScope"
+            class="input"
+            type="text"
+          >
+        </div>
+      </div>
+      <a
+        class="button is-link"
+        :href="twitchAuthorizeUrl"
+      >
+        Authorize with Twitch
+      </a>
+    </div>
+
+    <div
+      v-if="listener.kind === 'manual'"
+      class="block mt-4"
+    >
+      <RouterLink
+        :to="{ name: 'RemoteControlView', params: { id: listener.id } }"
+        class="button is-primary"
+      >
+        Open Remote Control
+      </RouterLink>
+    </div>
+
     <div class="mt-4">
       <ListenerRules
         :listener="listener"

@@ -18,6 +18,8 @@ export default class Client {
   ws: WebSocket;
   events: Map<string, Array<Function>> = new Map();
   connectionAttempts: number = 1;
+  private _closed: boolean = false;
+  private _reconnectTimer?: NodeJS.Timeout;
 
   constructor(url: string) {
     console.debug('Client connecting to WebSocket at:', url);
@@ -28,7 +30,17 @@ export default class Client {
     this.bindWebSocketEvents();
   }
 
+  // Marks this closure as intentional so the reconnect loop in
+  // bindConnectionEvents doesn't treat it as a dropped connection to
+  // recover from.
   close(): void {
+    this._closed = true;
+
+    if (this._reconnectTimer) {
+      clearTimeout(this._reconnectTimer);
+      this._reconnectTimer = undefined;
+    }
+
     this.ws.close();
   }
 
@@ -84,6 +96,10 @@ export default class Client {
 
   bindConnectionEvents(): void {
     this.on("close", () => {
+      if (this._closed) {
+        return;
+      }
+
       const intervalTime = this.connectionAttempts * 1000;
       const reconnectWait = intervalTime > 10000 ? 10000 : intervalTime;
 
@@ -91,7 +107,13 @@ export default class Client {
         console.debug('Client Connection Closed');
       }
 
-      setTimeout(() => {
+      this._reconnectTimer = setTimeout(() => {
+        this._reconnectTimer = undefined;
+
+        if (this._closed) {
+          return;
+        }
+
         if (this.connectionAttempts < 6) {
           console.debug(`Client Reconnection Attempt ${this.connectionAttempts}`);
         }

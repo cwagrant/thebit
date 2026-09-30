@@ -3,24 +3,23 @@
   import { editorKey } from '@/editor';
   import { useRouter } from 'vue-router';
 
-  type Listener = {
+  type Controller = {
     id: number;
     name: string;
-    active: number;
     kind: string;
     options: object;
   }
 
-  const listener = ref<Omit<Listener, "id">>({name: "", kind: "", options: {address: "", options:""}, active: 1});
-  const { toggleEditor, setContent, onContentUpdate, setLanguage} = inject(editorKey)!;
-  const listenerKinds = inject("listenerKinds");
+  const controller = ref<Controller>({ id: 0, name: "", kind: "", options: {} });
+  const { toggleEditor, setContent, onContentUpdate, setLanguage } = inject(editorKey)!;
+  const controllerKinds = inject("controllerKinds");
   const router = useRouter();
 
   const computedOptions = computed({
-    get: () => JSON.stringify(listener.value.options, null, 2),
+    get: () => JSON.stringify(controller.value.options, null, 2),
     set: (val: string) => {
       try {
-        listener.value.options= JSON.parse(val);
+        controller.value.options = JSON.parse(val);
       } catch {
       }
     }
@@ -35,26 +34,24 @@
     });
   }
 
-  const saveListener = () => {
-    const { name, kind, active } = listener.value
-    console.log('newValue', listener.value)
+  const saveController = () => {
+    const { name, kind } = controller.value;
 
-    fetch(`/api/listeners`, {
+    fetch(`/api/controllers`, {
       method: "POST",
       headers: {
-      "Content-Type": "application/json"
+        "Content-Type": "application/json"
       },
       body: JSON.stringify({
         name: name,
         kind: kind,
-        options: computedOptions.value,
-        active: active
+        options: computedOptions.value
       })
     }).then((response) => {
-      if(!response.ok) {
-        console.error("Failed to update rule");
+      if (!response.ok) {
+        console.error("Failed to create controller");
       } else {
-        router.push('/listeners');
+        router.push('/');
       }
     })
   }
@@ -62,11 +59,11 @@
 
 <template>
   <h1 class="is-size-2">
-    New Listener
+    New Controller
   </h1>
   <form
     class="block"
-    @submit.prevent="saveListener"
+    @submit.prevent="saveController"
   >
     <label
       class="label"
@@ -74,7 +71,7 @@
     >Name</label>
     <input
       id="name"
-      v-model="listener.name"
+      v-model="controller.name"
       class="input"
       type="text"
       required
@@ -88,30 +85,18 @@
       <div class="control">
         <select
           id="kind"
-          v-model="listener.kind"
+          v-model="controller.kind"
           class="input"
           required
         >
           <option
-            v-for="kind in listenerKinds"
+            v-for="kind in controllerKinds"
             :key="kind"
             :value="kind"
           >
             {{ kind }}
           </option>
         </select>
-      </div>
-    </div>
-
-    <div class="field">
-      <label class="label">Active</label>
-      <div class="control">
-        <input
-          v-model="listener.active"
-          type="checkbox"
-          true-value="1"
-          false-value="0"
-        >
       </div>
     </div>
 
@@ -138,9 +123,3 @@
     </button>
   </form>
 </template>
-
-<style scoped>
-  .json-editor {
-    height: 18rem;
-  }
-</style>

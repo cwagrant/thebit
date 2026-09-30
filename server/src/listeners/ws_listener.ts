@@ -1,3 +1,4 @@
+import WebSocket from "ws";
 import Client from "../client.js";
 import { Listener } from "./listener.js";
 import type Matrix from "../matrix.js";
@@ -27,6 +28,15 @@ class WSListener extends Listener {
     this.socket = new Client(this.options.address);
   }
 
+  get status(): ListenerStatus {
+    if (!this.active)
+      return { state: "disabled" };
+
+    // Client reconnects on its own after a drop, so anything short of open
+    // means it's still trying.
+    return { state: this.socket.ws.readyState === WebSocket.OPEN ? "connected" : "connecting" };
+  }
+
   stop(): void {
     this.socket.close();
   }
@@ -36,7 +46,7 @@ class WSListener extends Listener {
       this.socket.on(rule.message, (args: any) => {
         try {
           const executionResult: ListenerAction | ListenerAction[] = this.execRule(rule, args);
-          const listenerActions = Array.isArray(executionResult) ? executionResult : [executionResult];
+          const listenerActions = (Array.isArray(executionResult) ? executionResult : [executionResult]).filter(Boolean);
 
           this.callActions(listenerActions);
         } catch (err: any) {

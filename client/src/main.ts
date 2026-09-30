@@ -1,12 +1,13 @@
 import { createApp } from 'vue';
 import App from './App.vue';
 import router from './router';
+import type { Environment } from 'monaco-editor';
 import editorWorker from 'monaco-editor/esm/vs/editor/editor.worker?worker';
 import jsonWorker from 'monaco-editor/esm/vs/language/json/json.worker?worker';
 import tsWorker from 'monaco-editor/esm/vs/language/typescript/ts.worker?worker';
 
 self.MonacoEnvironment = {
-  getWorker(_, label) {
+  getWorker(_: string, label: string) {
     if (label === 'json') {
       return new jsonWorker();
     }
@@ -15,7 +16,7 @@ self.MonacoEnvironment = {
     }
     return new editorWorker();
   }
-};
+} satisfies Environment;
 
 const app = createApp(App);
 

@@ -10,11 +10,6 @@ const router = createRouter({
       component: ControllerView,
     },
     {
-      path: '/about',
-      name: 'about',
-      component: () => import('../views/AboutView.vue'),
-    },
-    {
       path: '/listeners',
       name: 'ListenerIndex',
       component: () => import('../views/ListenersIndex.vue'),
@@ -28,6 +23,21 @@ const router = createRouter({
       path: '/listeners/:id',
       name: 'ListenerView',
       component: () => import('../views/ListenerView.vue'),
+    },
+    {
+      path: '/controllers/new',
+      name: 'ControllerNew',
+      component: () => import('../views/NewControllerView.vue'),
+    },
+    {
+      path: '/controllers/:id',
+      name: 'ControllerSettingsView',
+      component: () => import('../views/ControllerSettingsView.vue'),
+    },
+    {
+      path: '/remote/:id',
+      name: 'RemoteControlView',
+      component: () => import('../views/RemoteControlView.vue'),
     }
   ],
 });

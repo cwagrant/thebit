@@ -22,6 +22,29 @@ abstract class Controller implements IController {
   get kind(): string { return this._kind; };
   get options(): any { return this._options; };
 
+  // The actions this controller currently exposes, as a tree keyed by path
+  // segment (an OBS scene name, or ATEM me0 -> upstreamKey0) with a list of
+  // Action descriptors at each leaf. The remote control view renders this,
+  // and only actions that appear in it can be fired from there - see
+  // hasAction below.
+  getActions(): Actions {
+    return {};
+  }
+
+  hasAction(action: string, path: string[]): boolean {
+    let node: Actions | undefined = this.getActions();
+
+    for (const segment of path) {
+      if (!node || Array.isArray(node)) {
+        return false;
+      }
+
+      node = node[segment];
+    }
+
+    return Array.isArray(node) && node.some((candidate) => candidate.action === action);
+  }
+
   toJSON() {
     return {
       id: this.id,

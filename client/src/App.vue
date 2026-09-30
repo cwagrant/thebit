@@ -3,11 +3,12 @@ import { ref, provide, onMounted} from 'vue'
 import { RouterLink, RouterView } from 'vue-router'
 import 'bulma/css/bulma.min.css'
 import EditorView from '@/components/EditorView.vue'
+import { editorKey, type Editor } from '@/editor'
 
 const editorContent = ref("");
 const editorLanguage = ref("json");
 const editorVisible = ref(false);
-const editorCallback = ref();
+const editorCallback = ref<(content: string) => void>();
 
 const toggleEditor = (state: boolean | undefined = undefined) => {
   editorVisible.value = state ?? !editorVisible.value;
@@ -26,9 +27,9 @@ const closeEditor = () => {
   editorCallback.value = undefined;
 }
 
-const editor = {
+const editor: Editor = {
   toggleEditor,
-  onContentUpdate: (callback: typeof function) => {
+  onContentUpdate: (callback) => {
     editorCallback.value = callback;
   },
   setContent: (content: string) => {
@@ -40,6 +41,7 @@ const editor = {
 }
 
 const listenerKinds = ref<string[]>([]);
+const controllerKinds = ref<string[]>([]);
 
 const fetchListenerKinds = async () => {
   const response = await fetch("/api/listeners/available")
@@ -48,12 +50,20 @@ const fetchListenerKinds = async () => {
   listenerKinds.value = data;
 }
 
+const fetchControllerKinds = async () => {
+  const response = await fetch("/api/controllers/available")
+  const data = await response.json();
+  controllerKinds.value = data;
+}
+
 onMounted(() => {
  fetchListenerKinds();
+ fetchControllerKinds();
 })
 
-provide("editor", editor)
+provide(editorKey, editor)
 provide("listenerKinds", listenerKinds);
+provide("controllerKinds", controllerKinds);
 </script>
 
 <template>
@@ -64,12 +74,6 @@ provide("listenerKinds", listenerKinds);
         to="/"
       >
         Home
-      </RouterLink>
-      <RouterLink
-        class="navbar-item"
-        to="/about"
-      >
-        About
       </RouterLink>
       <RouterLink
         class="navbar-item"

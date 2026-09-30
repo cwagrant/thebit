@@ -9,7 +9,15 @@
   import { watch, ref, onMounted } from 'vue';
   import ListenerRule from '@/components/ListenerRule.vue';
 
-  const rules = ref({});
+  type Rule = {
+    id: number;
+    listener_id: number;
+    message: string;
+    rule: string;
+    active: number;
+  }
+
+  const rules = ref<Record<number, Rule>>({});
   const fetchListenerRules = async () => {
     if(!props.listener.id)
       return
@@ -30,11 +38,11 @@
   };
 
 
-  const updateRule = (rule) => {
+  const updateRule = (rule: Rule) => {
     rules.value[rule.id] = rule;
   }
 
-  const deleteRule = (ruleId) => {
+  const deleteRule = (ruleId: number) => {
     delete rules.value[ruleId]
   }
 

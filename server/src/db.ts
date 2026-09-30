@@ -38,6 +38,17 @@ if (dbVersion < 1) {
   db.pragma("user_version = 1");
 }
 
+if (dbVersion < 2) {
+  // Subscription metadata for listeners like Twitch EventSub, where a rule's
+  // "message" alone isn't enough to create a subscription: `version` selects
+  // the subscription schema version and `condition` (JSON text) carries the
+  // extra scoping fields a given subscription type requires beyond what the
+  // listener already knows (e.g. moderator_user_id, to_broadcaster_user_id).
+  db.prepare("ALTER TABLE listener_rules ADD COLUMN version TEXT").run();
+  db.prepare("ALTER TABLE listener_rules ADD COLUMN condition TEXT").run();
+  db.pragma("user_version = 2");
+}
+
 db.prepare(`
 INSERT INTO listeners (name, kind, options)
 VALUES (?, ?, ?)

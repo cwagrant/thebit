@@ -14,7 +14,7 @@
     "start-server": "node wsserver.js",
     "dev": "concurrently \"npm run dev -w server\" \"npm run dev -w client\"",
     "build": "npm run build --workspaces",
-    "start": "node dist/index.js",
+    "start": "npm run start -w server",
     "test": "scripts/test.sh"
   },
   "author": "",

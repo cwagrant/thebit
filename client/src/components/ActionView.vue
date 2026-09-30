@@ -1,15 +1,15 @@
 <script setup lang="ts">
+  import { inject } from 'vue';
   import type { Action } from '@/action';
-  import { isOptionsAction, isPropAction } from '@/action';
+  import { isOptionsAction, isPropAction, sendActionKey } from '@/action';
 
   const props = defineProps<{
     action: Action,
     path: string[],
-    controller: "obs" | "atem";
+    controller: string;
   }>();
-  console.log('propAction', props)
-  const hasOptions = "options" in props.action;
 
+  const send = inject(sendActionKey)!;
 
   const decamelize = (str: string, separator = '_') => {
     return str
@@ -32,20 +32,16 @@
 
   const prettyPrintAction = (str: string) => titleize(decamelize(str))
 
-  const sendAction = async (event: any) => {
-    const target = event.currentTarget;
-    let formData = Object.fromEntries(new FormData(target));
-    formData.path = props.path.join('.');
-    console.log('formData', formData)
-    const response = await fetch(`/api/${props.controller}/action`, {
-      method: "POST",
-      body: JSON.stringify(formData),
-      headers: {
-        "Content-Type": "application/json"
-      }
+  const sendAction = (event: Event) => {
+    const form = event.currentTarget as HTMLFormElement;
+    const formProps = Object.fromEntries(new FormData(form)) as Record<string, string>;
+
+    send({
+      controller: props.controller,
+      path: props.path,
+      action: props.action.action,
+      props: formProps
     });
-    console.log('toggle source', event);
-    console.log('response', response)
   }
 
   const getValue = (obj: any) => {
@@ -64,10 +60,9 @@
 <template>
   <template v-if="isOptionsAction(props.action)">
     <div class="columns my-2">
-    <template v-for="(values, opt) in props.action.options">
-      <form @submit.prevent="sendAction" v-for="val in values" class="py-2 column">
+    <template v-for="(values, opt) in props.action.options" :key="opt">
+      <form @submit.prevent="sendAction" v-for="val in values" :key="getValue(val)" class="py-2 column">
         <input type="hidden" :name="opt" :value="getValue(val)"/>
-        <input type="hidden" name="action" :value="props.action.action"/>
         <button type="submit" class="column is-fullwidth button is-info">{{prettyPrintAction(action.action)}}: {{getValue(val)}}</button>
       </form>
     </template>
@@ -75,12 +70,11 @@
   </template>
   <template v-else-if="isPropAction(props.action)">
     <form class="mx-0 my-2 columns is-vcentered py-2" @submit.prevent="sendAction">
-      <input type="hidden" name="action" :value="action.action"/>
       <button type="submit" class="column button" :class="{'is-primary': hasProps(props.action.props), 'is-warning': !hasProps(props.action.props)}">{{prettyPrintAction(action.action)}}</button>
 
-      <template v-for="(propType, name) in props.action.props">
+      <template v-for="(propType, name) in props.action.props" :key="name">
         <input type="text" :name="name" class="column input ml-2 is-medium" v-if="propType=='string'" required>
-        <input type="text" :name="name" class="column input ml-2 is-medium" pattern="\d+(\.\d+)?" v-else-if="propType=='number'" required>
+        <input type="text" :name="name" class="column input ml-2 is-medium" pattern="-?\d+(\.\d+)?" v-else-if="propType=='number'" required>
       </template>
     </form>
   </template>
