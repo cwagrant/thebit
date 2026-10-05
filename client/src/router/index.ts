@@ -35,6 +35,14 @@ const router = createRouter({
       component: () => import('../views/ControllerSettingsView.vue'),
     },
     {
+      // Reached through a controller's invite link, with the invite token in
+      // the URL fragment. `public` routes skip the admin login in App.vue.
+      path: '/connect',
+      name: 'ConnectView',
+      component: () => import('../views/ConnectView.vue'),
+      meta: { public: true },
+    },
+    {
       path: '/remote/:id',
       name: 'RemoteControlView',
       component: () => import('../views/RemoteControlView.vue'),

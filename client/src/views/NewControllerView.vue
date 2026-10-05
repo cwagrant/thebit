@@ -1,60 +1,43 @@
 <script setup lang="ts">
-  import { ref, inject, computed } from "vue";
-  import { editorKey } from '@/editor';
+  import { ref, inject, type Ref } from "vue";
   import { useRouter } from 'vue-router';
+  import { controllerFieldsKey, type SecretChanges } from '@/settings';
+  import SettingsForm from '@/components/SettingsForm.vue';
 
-  type Controller = {
-    id: number;
-    name: string;
-    kind: string;
-    options: object;
-  }
-
-  const controller = ref<Controller>({ id: 0, name: "", kind: "", options: {} });
-  const { toggleEditor, setContent, onContentUpdate, setLanguage } = inject(editorKey)!;
-  const controllerKinds = inject("controllerKinds");
+  const name = ref("");
+  const kind = ref("");
+  const active = ref(1);
+  const options = ref<Record<string, unknown>>({});
+  const secrets = ref<SecretChanges>({});
+  const error = ref("");
   const router = useRouter();
+  const controllerKinds = inject<Ref<string[]>>("controllerKinds");
+  const controllerFields = inject(controllerFieldsKey);
 
-  const computedOptions = computed({
-    get: () => JSON.stringify(controller.value.options, null, 2),
-    set: (val: string) => {
-      try {
-        controller.value.options = JSON.parse(val);
-      } catch {
-      }
-    }
-  })
+  const saveController = async () => {
+    error.value = "";
 
-  const editOptions = () => {
-    toggleEditor(true);
-    setLanguage("json");
-    setContent(computedOptions.value);
-    onContentUpdate((newContent: string) => {
-      computedOptions.value = newContent;
-    });
-  }
-
-  const saveController = () => {
-    const { name, kind } = controller.value;
-
-    fetch(`/api/controllers`, {
+    const response = await fetch(`/api/controllers`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json"
       },
       body: JSON.stringify({
-        name: name,
-        kind: kind,
-        options: computedOptions.value
+        name: name.value,
+        kind: kind.value,
+        active: active.value,
+        options: options.value,
+        secrets: secrets.value
       })
-    }).then((response) => {
-      if (!response.ok) {
-        console.error("Failed to create controller");
-      } else {
-        router.push('/');
-      }
-    })
-  }
+    });
+
+    if (!response.ok) {
+      error.value = await response.text() || "Failed to create controller.";
+      return;
+    }
+
+    router.push('/');
+  };
 </script>
 
 <template>
@@ -65,56 +48,37 @@
     class="block"
     @submit.prevent="saveController"
   >
-    <label
-      class="label"
-      for="name"
-    >Name</label>
-    <input
-      id="name"
-      v-model="controller.name"
-      class="input"
-      type="text"
-      required
+    <SettingsForm
+      v-model:name="name"
+      v-model:kind="kind"
+      v-model:options="options"
+      v-model:secrets="secrets"
+      :kinds="controllerKinds ?? []"
+      :fields-by-kind="controllerFields ?? {}"
     >
-
-    <div class="field">
-      <label
-        class="label mt-2"
-        for="kind"
-      >Kind</label>
-      <div class="control">
-        <select
-          id="kind"
-          v-model="controller.kind"
-          class="input"
-          required
-        >
-          <option
-            v-for="kind in controllerKinds"
-            :key="kind"
-            :value="kind"
+      <div class="field">
+        <label
+          class="label mt-2"
+          for="active"
+        >Active</label>
+        <div class="control">
+          <input
+            id="active"
+            v-model="active"
+            type="checkbox"
+            :true-value="1"
+            :false-value="0"
           >
-            {{ kind }}
-          </option>
-        </select>
+        </div>
       </div>
-    </div>
+    </SettingsForm>
 
-    <div class="field">
-      <label
-        class="label mt-2"
-        for="options"
-      >Options</label>
-      <div class="control">
-        <pre><code>{{ computedOptions }}</code></pre>
-        <button
-          class="button mt-2"
-          @click.prevent="editOptions"
-        >
-          Edit Options
-        </button>
-      </div>
-    </div>
+    <p
+      v-if="error"
+      class="help is-danger"
+    >
+      {{ error }}
+    </p>
     <button
       type="submit"
       class="button mt-2 is-primary"

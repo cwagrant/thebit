@@ -11,12 +11,39 @@ class SocketIOListener extends Listener {
     this.start();
   }
 
+  static get fields(): SettingField[] {
+    return [
+      {
+        key: "address",
+        label: "Server address",
+        type: "text",
+        required: true,
+        placeholder: "https://example.com"
+      },
+      {
+        key: "token",
+        label: "Auth token",
+        type: "password",
+        secret: true,
+        help: "Sent to the server as auth.token, exactly as entered - include a 'Bearer ' prefix if the server expects one."
+      },
+      {
+        key: "options",
+        label: "Socket.IO options",
+        type: "json",
+        help: "Any other options to pass to the Socket.IO client."
+      }
+    ];
+  }
+
   start(): void {
     if (!this.active)
       return;
 
     const { address, options } = this.options;
-    this._socket = io(address, options);
+    const token = this.secret("token");
+
+    this._socket = io(address, token ? { ...options, auth: { ...options?.auth, token } } : options);
 
     this.socket.on("connect", () => {
       console.log("Connected to Socket IO Server: ", this.name);

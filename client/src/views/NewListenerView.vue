@@ -1,63 +1,43 @@
 <script setup lang="ts">
-  import { ref, inject, computed } from "vue";
-  import { editorKey } from '@/editor';
+  import { ref, inject, type Ref } from "vue";
   import { useRouter } from 'vue-router';
+  import { listenerFieldsKey, type SecretChanges } from '@/settings';
+  import SettingsForm from '@/components/SettingsForm.vue';
 
-  type Listener = {
-    id: number;
-    name: string;
-    active: number;
-    kind: string;
-    options: object;
-  }
-
-  const listener = ref<Omit<Listener, "id">>({name: "", kind: "", options: {address: "", options:""}, active: 1});
-  const { toggleEditor, setContent, onContentUpdate, setLanguage} = inject(editorKey)!;
-  const listenerKinds = inject("listenerKinds");
+  const name = ref("");
+  const kind = ref("");
+  const active = ref(1);
+  const options = ref<Record<string, unknown>>({});
+  const secrets = ref<SecretChanges>({});
+  const error = ref("");
+  const listenerKinds = inject<Ref<string[]>>("listenerKinds");
+  const listenerFields = inject(listenerFieldsKey);
   const router = useRouter();
 
-  const computedOptions = computed({
-    get: () => JSON.stringify(listener.value.options, null, 2),
-    set: (val: string) => {
-      try {
-        listener.value.options= JSON.parse(val);
-      } catch {
-      }
-    }
-  })
+  const saveListener = async () => {
+    error.value = "";
 
-  const editOptions = () => {
-    toggleEditor(true);
-    setLanguage("json");
-    setContent(computedOptions.value);
-    onContentUpdate((newContent: string) => {
-      computedOptions.value = newContent;
-    });
-  }
-
-  const saveListener = () => {
-    const { name, kind, active } = listener.value
-    console.log('newValue', listener.value)
-
-    fetch(`/api/listeners`, {
+    const response = await fetch(`/api/listeners`, {
       method: "POST",
       headers: {
-      "Content-Type": "application/json"
+        "Content-Type": "application/json"
       },
       body: JSON.stringify({
-        name: name,
-        kind: kind,
-        options: computedOptions.value,
-        active: active
+        name: name.value,
+        kind: kind.value,
+        options: options.value,
+        secrets: secrets.value,
+        active: active.value
       })
-    }).then((response) => {
-      if(!response.ok) {
-        console.error("Failed to update rule");
-      } else {
-        router.push('/listeners');
-      }
-    })
-  }
+    });
+
+    if (!response.ok) {
+      error.value = await response.text() || "Failed to create listener.";
+      return;
+    }
+
+    router.push('/listeners');
+  };
 </script>
 
 <template>
@@ -68,68 +48,33 @@
     class="block"
     @submit.prevent="saveListener"
   >
-    <label
-      class="label"
-      for="name"
-    >Name</label>
-    <input
-      id="name"
-      v-model="listener.name"
-      class="input"
-      type="text"
-      required
+    <SettingsForm
+      v-model:name="name"
+      v-model:kind="kind"
+      v-model:options="options"
+      v-model:secrets="secrets"
+      :kinds="listenerKinds ?? []"
+      :fields-by-kind="listenerFields ?? {}"
     >
-
-    <div class="field">
-      <label
-        class="label mt-2"
-        for="kind"
-      >Kind</label>
-      <div class="control">
-        <select
-          id="kind"
-          v-model="listener.kind"
-          class="input"
-          required
-        >
-          <option
-            v-for="kind in listenerKinds"
-            :key="kind"
-            :value="kind"
+      <div class="field">
+        <label class="label mt-2">Active</label>
+        <div class="control">
+          <input
+            v-model="active"
+            type="checkbox"
+            :true-value="1"
+            :false-value="0"
           >
-            {{ kind }}
-          </option>
-        </select>
+        </div>
       </div>
-    </div>
+    </SettingsForm>
 
-    <div class="field">
-      <label class="label">Active</label>
-      <div class="control">
-        <input
-          v-model="listener.active"
-          type="checkbox"
-          true-value="1"
-          false-value="0"
-        >
-      </div>
-    </div>
-
-    <div class="field">
-      <label
-        class="label mt-2"
-        for="options"
-      >Options</label>
-      <div class="control">
-        <pre><code>{{ computedOptions }}</code></pre>
-        <button
-          class="button mt-2"
-          @click.prevent="editOptions"
-        >
-          Edit Options
-        </button>
-      </div>
-    </div>
+    <p
+      v-if="error"
+      class="help is-danger"
+    >
+      {{ error }}
+    </p>
     <button
       type="submit"
       class="button mt-2 is-primary"

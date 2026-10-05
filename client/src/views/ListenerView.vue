@@ -1,21 +1,27 @@
 <script setup lang="ts">
-  import { ref, inject, computed, watch, onMounted} from "vue";
-  import { editorKey } from '@/editor';
+  import { ref, inject, computed, watch, onMounted, type Ref } from "vue";
   import { useRoute } from 'vue-router';
+  import { listenerFieldsKey, type SecretChanges } from '@/settings';
+  import SettingsForm from '@/components/SettingsForm.vue';
   import ListenerRules from '@/components/ListenerRules.vue';
-  import ListenerRule from '@/components/ListenerRule.vue';
 
   type Listener = {
     id: number;
     name: string;
     active: number;
     kind: string;
-    options: object;
+    options: Record<string, unknown>;
+    // Which secret fields have a saved value - the values themselves never
+    // come back from the server.
+    secrets: Record<string, boolean>;
   }
 
-  const listener = ref<Listener>({id: 0, name: "", kind: "", options: {}, active: 1});
-  const { toggleEditor, setContent, onContentUpdate, setLanguage} = inject(editorKey)!;
-  const listenerKinds = inject("listenerKinds");
+  const listener = ref<Listener>({id: 0, name: "", kind: "", options: {}, secrets: {}, active: 1});
+  const secretChanges = ref<SecretChanges>({});
+  const error = ref("");
+  const saved = ref(false);
+  const listenerKinds = inject<Ref<string[]>>("listenerKinds");
+  const listenerFields = inject(listenerFieldsKey);
 
   const route = useRoute();
 
@@ -26,45 +32,27 @@
     }
   )
 
-  const computedOptions = computed({
-    get: () => JSON.stringify(listener.value.options, null, 2),
-    set: (val: string) => {
-      try {
-        listener.value.options= JSON.parse(val);
-      } catch {
-      }
-    }
-  })
+  const updateListener = async () => {
+    const {id, name, kind, options, active} = listener.value
 
-  const editOptions = () => {
-    toggleEditor(true);
-    setLanguage("json");
-    setContent(computedOptions.value);
-    onContentUpdate((newContent: string) => {
-      computedOptions.value = newContent;
-      updateListener();
-    });
-  }
+    error.value = "";
+    saved.value = false;
 
-  const updateListener = () => {
-    const {id, name, kind, active} = listener.value
-    console.log('newValue', listener.value)
-    fetch(`/api/listeners/${id}`, {
+    const response = await fetch(`/api/listeners/${id}`, {
       method: "PUT",
       headers: {
-      "Content-Type": "application/json"
+        "Content-Type": "application/json"
       },
-      body: JSON.stringify({
-        name: name,
-        kind: kind,
-        options: computedOptions.value,
-        active: active
-      })
-    }).then((response) => {
-      if(!response.ok) {
-        console.error("Failed to update rule");
-      }
-    })
+      body: JSON.stringify({ name, kind, options, secrets: secretChanges.value, active })
+    });
+
+    if (!response.ok) {
+      error.value = await response.text() || "Failed to update listener.";
+      return;
+    }
+
+    saved.value = true;
+    await fetchListener();
   }
 
   const twitchScope = ref("user:read:chat user:bot");
@@ -74,22 +62,26 @@
   });
 
   const twitchTokenExpiresAt = computed(() => {
-    const expiresAt = (listener.value.options as any)?.accessTokenExpiresAt;
+    const expiresAt = listener.value.options?.accessTokenExpiresAt;
 
-    return expiresAt ? new Date(expiresAt) : null;
+    return typeof expiresAt === "number" ? new Date(expiresAt) : null;
   });
 
-  const fetchListener = () => {
+  const fetchListener = async () => {
     const { id } = route.params;
 
     if(!id)
       return
 
-    fetch(`/api/listeners/${id}`)
-      .then((response) => response.json())
-      .then((data) => {
-      listener.value = data;
-      });
+    const response = await fetch(`/api/listeners/${id}`);
+
+    if (!response.ok)
+      return;
+
+    const data = await response.json();
+
+    listener.value = { ...data, options: data.options ?? {} };
+    secretChanges.value = {};
   }
 
   onMounted(() => {
@@ -108,70 +100,47 @@
       </RouterLink>
     </div>
   </div>
-  <form class="block">
-    <label
-      class="label"
-      for="name"
-    >Name</label>
-    <input
-      id="name"
-      v-model="listener.name"
-      class="input"
-      type="text"
+  <form
+    class="block"
+    @submit.prevent="updateListener"
+  >
+    <SettingsForm
+      v-model:name="listener.name"
+      v-model:kind="listener.kind"
+      v-model:options="listener.options"
+      v-model:secrets="secretChanges"
+      :kinds="listenerKinds ?? []"
+      :fields-by-kind="listenerFields ?? {}"
+      :secrets-set="listener.secrets"
     >
-
-    <div class="field">
-      <label
-        class="label mt-2"
-        for="kind"
-      >Kind</label>
-      <div class="control">
-        <select
-          id="kind"
-          class="input"
-          :value="listener.kind"
-        >
-          <option
-            v-for="kind in listenerKinds"
-            :key="kind"
-            :value="kind"
+      <div class="field">
+        <label class="label mt-2">Active</label>
+        <div class="control">
+          <input
+            v-model="listener.active"
+            type="checkbox"
+            :true-value="1"
+            :false-value="0"
           >
-            {{ kind }}
-          </option>
-        </select>
+        </div>
       </div>
-    </div>
+    </SettingsForm>
 
-    <div class="field">
-      <label class="label">Active</label>
-      <div class="control">
-        <input
-          v-model="listener.active"
-          type="checkbox"
-          true-value="1"
-          false-value="0"
-        >
-      </div>
-    </div>
-
-    <div class="field">
-      <label
-        class="label mt-2"
-        for="options"
-      >Options</label>
-      <div class="control">
-        <pre><code>{{ computedOptions }}</code></pre>
-        <button
-          class="button mt-2"
-          @click.prevent="editOptions"
-        >
-          Edit Options
-        </button>
-      </div>
-    </div>
+    <p
+      v-if="error"
+      class="help is-danger"
+    >
+      {{ error }}
+    </p>
+    <p
+      v-else-if="saved"
+      class="help is-success"
+    >
+      Saved.
+    </p>
     <button
+      type="submit"
       class="button mt-2 is-primary"
-      @click.prevent="updateListener"
     >
       Save
     </button>

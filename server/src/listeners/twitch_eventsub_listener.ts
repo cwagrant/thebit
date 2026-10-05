@@ -72,6 +72,59 @@ class TwitchEventSubListener extends Listener {
     this.start();
   }
 
+  static get fields(): SettingField[] {
+    return [
+      {
+        key: "clientId",
+        label: "Client ID",
+        type: "text",
+        required: true,
+        help: "From your application's registration at dev.twitch.tv/console/apps."
+      },
+      {
+        key: "clientSecret",
+        label: "Client secret",
+        type: "password",
+        secret: true,
+        help: "Needed to authorize with Twitch and to refresh the access token."
+      },
+      {
+        key: "broadcasterUserId",
+        label: "Broadcaster user ID",
+        type: "text",
+        required: true,
+        help: "The numeric user id of the channel to listen to."
+      },
+      {
+        key: "chatUserId",
+        label: "Chat user ID",
+        type: "text",
+        help: "Only for chat subscription types: the user id whose user:read:chat authorization is used."
+      },
+      {
+        key: "accessToken",
+        label: "Access token",
+        type: "password",
+        secret: true,
+        help: "Set by 'Authorize with Twitch' below - only fill this in to use a token obtained some other way."
+      },
+      {
+        key: "refreshToken",
+        label: "Refresh token",
+        type: "password",
+        secret: true,
+        help: "Set by 'Authorize with Twitch' below."
+      },
+      {
+        key: "address",
+        label: "EventSub WebSocket URL",
+        type: "ws-url",
+        placeholder: DEFAULT_EVENTSUB_URL,
+        help: "Leave blank for Twitch itself. Point this at the Twitch CLI's mock server to test."
+      }
+    ];
+  }
+
   start(): void {
     if (!this.active)
       return;
@@ -80,8 +133,8 @@ class TwitchEventSubListener extends Listener {
       throw new Error(`Twitch EventSub listener '${this.name}' requires a 'clientId' option`);
     }
 
-    if (!this.options.accessToken) {
-      throw new Error(`Twitch EventSub listener '${this.name}' requires an 'accessToken' option`);
+    if (!this.secret("accessToken")) {
+      throw new Error(`Twitch EventSub listener '${this.name}' requires an access token`);
     }
 
     if (!this.options.broadcasterUserId) {
@@ -452,7 +505,7 @@ class TwitchEventSubListener extends Listener {
       }, {
         headers: {
           "Client-Id": this.options.clientId,
-          "Authorization": `Bearer ${this.options.accessToken}`,
+          "Authorization": `Bearer ${this.secret("accessToken")}`,
           "Content-Type": "application/json"
         }
       });
@@ -480,7 +533,7 @@ class TwitchEventSubListener extends Listener {
           params: { id: subscriptionId },
           headers: {
             "Client-Id": this.options.clientId,
-            "Authorization": `Bearer ${this.options.accessToken}`
+            "Authorization": `Bearer ${this.secret("accessToken")}`
           }
         });
       } catch (err: any) {
@@ -503,7 +556,7 @@ class TwitchEventSubListener extends Listener {
 
     const expiresAt = this.options.accessTokenExpiresAt;
 
-    if (!expiresAt || !this.options.refreshToken || !this.options.clientSecret) {
+    if (!expiresAt || !this.secret("refreshToken") || !this.secret("clientSecret")) {
       return;
     }
 
@@ -520,7 +573,10 @@ class TwitchEventSubListener extends Listener {
       return;
     }
 
-    if (!this.options.refreshToken || !this.options.clientId || !this.options.clientSecret) {
+    const refreshToken = this.secret("refreshToken");
+    const clientSecret = this.secret("clientSecret");
+
+    if (!refreshToken || !this.options.clientId || !clientSecret) {
       console.warn(`Twitch EventSub listener '${this.name}' cannot refresh its access token: missing 'refreshToken', 'clientId', or 'clientSecret'`);
       return;
     }
@@ -528,20 +584,23 @@ class TwitchEventSubListener extends Listener {
     try {
       const tokenResponse = await refreshTwitchAccessToken({
         clientId: this.options.clientId,
-        clientSecret: this.options.clientSecret,
-        refreshToken: this.options.refreshToken
+        clientSecret,
+        refreshToken
       });
 
-      // update() persists to the listeners table and swaps this.options in
-      // place, so createSubscription/revokeSubscriptions (which always read
-      // this.options.accessToken fresh) pick up the new token immediately.
+      // storeSecrets() persists the new tokens (encrypted) and swaps them in
+      // in memory, so createSubscription/revokeSubscriptions (which always
+      // read the access token fresh) pick up the new one immediately. The
+      // expiry isn't a secret, so it stays in options.
+      this.storeSecrets({
+        accessToken: tokenResponse.access_token,
+        refreshToken: tokenResponse.refresh_token
+      });
       this.update({
         name: this.name,
         kind: this.kind,
         options: {
           ...this.options,
-          accessToken: tokenResponse.access_token,
-          refreshToken: tokenResponse.refresh_token,
           accessTokenExpiresAt: Date.now() + tokenResponse.expires_in * 1000
         }
       });

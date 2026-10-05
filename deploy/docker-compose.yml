@@ -1,0 +1,118 @@
+# thebit and a sish tunnel server (https://github.com/antoniomika/sish),
+# both behind an existing Traefik instance that terminates TLS.
+#
+# thebit is served at https://<THEBIT_DOMAIN>. Someone invited to connect
+# their OBS runs the ssh command their invite page shows, and their OBS
+# WebSocket becomes reachable at wss://obs-<id>.<SISH_DOMAIN> for thebit to
+# connect to - Traefik passes those requests (and their WebSocket upgrades)
+# to sish as plain HTTP, and sish routes them by hostname. The ssh port
+# invitees connect to is published straight from the sish container.
+#
+# Before starting it:
+#   1. Point DNS at this server: A records for THEBIT_DOMAIN and SISH_DOMAIN,
+#      and a wildcard A record for *.SISH_DOMAIN.
+#   2. Make sure the Traefik certificate resolver named in .env uses a DNS
+#      challenge - Let's Encrypt only issues wildcard certificates that way.
+#   3. Open port 2222 (ssh) alongside Traefik's own ports.
+#   4. Copy .env.example to .env and fill it in.
+#
+# Then: docker compose up -d --build
+
+services:
+  thebit:
+    build:
+      context: ..
+    restart: unless-stopped
+    networks:
+      - traefik
+    volumes:
+      # The database and the key its secrets are encrypted with. Back this
+      # volume up - without the key the stored secrets can't be read.
+      - thebit-data:/data
+    environment:
+      - PORT=3131
+      # Everything is reachable from the internet here, so there's no
+      # running this without a login.
+      - THEBIT_ADMIN_PASSWORD=${THEBIT_ADMIN_PASSWORD:?Set THEBIT_ADMIN_PASSWORD in .env}
+      - THEBIT_SECRET_KEY=${THEBIT_SECRET_KEY:-}
+      - PUBLIC_URL=https://${THEBIT_DOMAIN}
+      - TWITCH_OAUTH_REDIRECT_URI=https://${THEBIT_DOMAIN}/oauth/twitch/callback
+      - TUNNEL_DOMAIN=${SISH_DOMAIN}
+      - TUNNEL_SSH_PORT=2222
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=${TRAEFIK_NETWORK}
+      - traefik.http.routers.thebit.rule=Host(`${THEBIT_DOMAIN}`)
+      - traefik.http.routers.thebit.entrypoints=${TRAEFIK_ENTRYPOINT}
+      - traefik.http.routers.thebit.tls=true
+      - traefik.http.routers.thebit.tls.certresolver=${TRAEFIK_CERTRESOLVER}
+      - traefik.http.services.thebit.loadbalancer.server.port=3131
+
+  sish:
+    image: antoniomika/sish:latest
+    restart: unless-stopped
+    networks:
+      - traefik
+    ports:
+      # Only ssh is published. Plain TCP forwards an invitee might ask for
+      # (any -R port other than 80/443) get bound inside the container and
+      # stay unreachable from outside.
+      - "2222:2222"
+    depends_on:
+      - thebit
+    volumes:
+      # The server's ssh host keys. Keep these - if they change, everyone who
+      # has connected before gets a host key warning from ssh.
+      - ./data/sish/keys:/keys
+      # Public keys allowed to log in without a password. Left empty on
+      # purpose: logins are approved by thebit instead (see below).
+      - ./data/sish/pubkeys:/pubkeys
+    command:
+      - --domain=${SISH_DOMAIN}
+      - --ssh-address=:2222
+      - --http-address=:80
+      # TLS is Traefik's job; this tells sish its tunnels are still served
+      # over https from the outside.
+      - --https=false
+      - --proxy-ssl-termination=true
+      - --private-keys-directory=/keys
+      - --authentication=true
+      - --authentication-keys-directory=/pubkeys
+      # Every ssh login is checked with thebit: the username has to be a
+      # controller's tunnel id and the password that controller's live
+      # invite token.
+      - --authentication-password-request-url=http://thebit:3131/api/tunnel/auth
+      # The subdomain is the one the client asks for with the ssh username
+      # appended (obs-<id>), and the bind fails rather than falling back to
+      # a random name. Together with the login check above, that means only
+      # a controller's invitee can publish at that controller's address.
+      - --bind-random-subdomains=false
+      - --force-requested-subdomains=true
+      - --append-user-to-subdomain=true
+      # OBS's WebSocket is silent while nothing is happening, which the
+      # default 5s idle timeout would treat as a dead connection.
+      - --idle-connection=false
+      - --bind-random-ports=true
+      - --redirect-root=false
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=${TRAEFIK_NETWORK}
+      # Every subdomain of SISH_DOMAIN goes to sish. This is Traefik v3
+      # syntax; on v2 use HostRegexp(`{subdomain:[a-z0-9-]+}.<domain>`).
+      - traefik.http.routers.sish.rule=HostRegexp(`^[a-z0-9-]+\.${SISH_DOMAIN}$$`)
+      - traefik.http.routers.sish.entrypoints=${TRAEFIK_ENTRYPOINT}
+      - traefik.http.routers.sish.tls=true
+      - traefik.http.routers.sish.tls.certresolver=${TRAEFIK_CERTRESOLVER}
+      # A regexp rule doesn't tell Traefik which names to get a certificate
+      # for, so ask for the wildcard explicitly.
+      - traefik.http.routers.sish.tls.domains[0].main=${SISH_DOMAIN}
+      - traefik.http.routers.sish.tls.domains[0].sans=*.${SISH_DOMAIN}
+      - traefik.http.services.sish.loadbalancer.server.port=80
+
+volumes:
+  thebit-data:
+
+networks:
+  traefik:
+    name: ${TRAEFIK_NETWORK}
+    external: true

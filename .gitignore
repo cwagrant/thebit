@@ -8,3 +8,5 @@ config.json
 listeners.yaml
 config.yaml
 *.sqlite*
+thebit.key
+deploy/data/

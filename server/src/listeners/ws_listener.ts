@@ -13,6 +13,18 @@ class WSListener extends Listener {
     this.socket = new Client(config.address);
   }
 
+  static get fields(): SettingField[] {
+    return [
+      {
+        key: "address",
+        label: "WebSocket URL",
+        type: "ws-url",
+        required: true,
+        placeholder: "ws://localhost:8080"
+      }
+    ];
+  }
+
   get socket() {
     return this._socket;
   }

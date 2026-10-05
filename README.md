@@ -61,11 +61,27 @@ To get that authorization without asking someone to install the Twitch CLI, `the
    http://<host>:3131/oauth/twitch/authorize?listenerId=<id>&scope=<space-separated scopes>
    ```
    e.g. `?listenerId=2&scope=bits:read` for `channel.cheer`. (The Listeners UI has an "Authorize with Twitch" button on a `twitch-eventsub` listener's page that builds this link for you.)
-4. They log into Twitch and click Allow. Twitch redirects back to `/oauth/twitch/callback`, which exchanges the code for an access token + refresh token, saves both into that listener's options, reloads the listener live (no restart needed), and redirects back to that listener's page in the app.
+4. They log into Twitch and click Allow. Twitch redirects back to `/oauth/twitch/callback`, which exchanges the code for an access token + refresh token, saves both (encrypted) for that listener, reloads the listener live (no restart needed), and redirects back to that listener's page in the app.
 
 The listener automatically refreshes its access token in the background once it has both a refresh token and a known expiry (both set by the callback above), so this is normally a one-time step per scope. If a listener's `accessToken` was set some other way (e.g. a manually-pasted app access token with no refresh token), it's treated as long-lived and nothing is scheduled.
 
 **Chat-based events instead of dedicated subscription types.** `channel.chat.message` and `channel.chat.notification` need `user:read:chat` (and likely `user:bot`) scope authorized by whoever's identity is doing the reading, rather than needing the broadcaster specifically - if that identity is a moderator (or the broadcaster) of the target channel, you can self-authorize this against your own account with no involvement from the channel owner at all. Set `chatUserId` in the listener's options to that identity's user id - it gets merged into every rule's condition as `user_id`, alongside `broadcaster_user_id`. `channel.chat.notification` covers subs/resubs/gift subs/raids with a structured `notice_type` payload (a real alternative to `channel.subscribe`), and `channel.chat.message`'s `message.fragments` array marks cheermote tokens with their bit values, which a rule can sum to detect cheers - at the cost of receiving every chat message rather than a pre-filtered cheer-only stream.
+
+### Secrets, admin login and invite links
+
+Values a controller or listener kind marks as secret (the OBS WebSocket password, a Twitch listener's client secret and access/refresh tokens, a Socket.IO listener's auth token) are stored encrypted in the `secrets` table rather than in the row's options, and are never sent back to a browser. A Socket.IO listener's token is its own `token` setting, sent to the server as `auth.token`. The encryption key comes from `THEBIT_SECRET_KEY`, or is generated into `thebit.key` next to the database on first run. Back the key up - without it the stored secrets can't be decrypted.
+
+Set `THEBIT_ADMIN_PASSWORD` in your `.env` to require a login for the app and everything under `/api`. Without it the app is open to anyone who can reach its port, so set it before making the server reachable from outside your own network.
+
+To let someone else connect their own OBS, open that controller's settings and create an invite link. Whoever has the link gets a page where they can enter their OBS WebSocket URL and password for that one controller, and nothing else. The link is shown once, lasts 7 days, and can be replaced or revoked from the same page. Their OBS has to be reachable from this server - if it's behind a home router, a tunnel such as `cloudflared tunnel --url http://localhost:4455` gives them a `wss://` address to enter. If this server is reached through a different address than the one you browse it at, set `PUBLIC_URL` so the link is built with the right one.
+
+### Tunnels for invited controllers
+
+Instead of asking an invited person to set up their own tunnel, you can run a [sish](https://github.com/antoniomika/sish) server and have thebit hand out a ready-made command. `deploy/docker-compose.yml` runs both thebit (built from the `Dockerfile` here) and sish behind an existing Traefik instance, which handles TLS - its comments cover the DNS records, certificate resolver and port it needs. Run it from the `deploy` directory with `docker compose up -d --build` after copying `.env.example` to `.env`.
+
+With `TUNNEL_DOMAIN` set in thebit's `.env`, a controller's invite page shows an `ssh` command to run on the computer with OBS, a button to copy the password it asks for, and fills in the address the tunnel publishes OBS at (`wss://obs-<id>.<TUNNEL_DOMAIN>`, fixed per controller). Nothing needs installing - Windows, macOS and Linux all ship an ssh client - and the tunnel lasts for as long as the command is left running.
+
+The tunnel password is the invite link's own token, checked by thebit each time someone logs in to the tunnel server, so replacing or revoking the link also cuts off the tunnel login.
 
 ### Development
 

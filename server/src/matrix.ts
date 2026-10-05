@@ -3,13 +3,18 @@ import { Listener } from './listeners/index.js';
 import db from "./db.js";
 import knex from "./knex.js";
 import cfg from "./config.js";
+import { loadSecrets, saveSecrets, splitSecrets, type SecretOwner } from "./settings.js";
 
 interface ListenerConstructor {
   new(matrix: Matrix, config: IListener): Listener
+  fields?: SettingField[]
 }
 
 interface ControllerConstructor {
   new(config: IController): Controller
+  fields?: SettingField[]
+  tools?: ControllerTool[]
+  tunnel?: ControllerTunnel
 }
 
 export default class Matrix {
@@ -20,12 +25,15 @@ export default class Matrix {
   // listeners page can say more than just "not running".
   _listener_errors: Map<number, string> = new Map();
   _available_controllers: Map<string, ControllerConstructor> = new Map();
+  // Why an enabled controller failed to start, by controller id.
+  _controller_errors: Map<number, string> = new Map();
 
   get listeners() { return this._listeners; }
   get controllers() { return this._controllers; }
   get availableListeners() { return this._available_listeners; }
   get listenerErrors() { return this._listener_errors; }
   get availableControllers() { return this._available_controllers; }
+  get controllerErrors() { return this._controller_errors; }
 
   async start() {
     await this.loadControllerPlugins();
@@ -59,11 +67,13 @@ export default class Matrix {
       throw new Error(`Listener ${id} not found`);
     }
 
+    // Before the active check, so a disabled listener's secrets still get
+    // moved out of plaintext.
+    this.hydrateListener(row);
+
     if (!row.active) {
       return undefined;
     }
-
-    row.options = JSON.parse(row.options);
 
     this._listener_errors.delete(id);
 
@@ -84,14 +94,16 @@ export default class Matrix {
   // Like reloadListener above, fully recreates from the current DB row
   // rather than restarting the existing instance in place, since a
   // controller's options (e.g. an OBS address/password) are read once in
-  // its constructor. Controllers don't yet have an enable/disable concept,
-  // so unlike reloadListener this always (re)constructs.
-  async reloadController(id: number): Promise<Controller> {
+  // its constructor. Disabled (active=0) rows are likewise torn down and
+  // left uninstantiated, so a disabled controller holds no connection and
+  // actions aimed at it go nowhere.
+  async reloadController(id: number): Promise<Controller | undefined> {
     const controller = this.controllers.values().find((controller) => controller.id === id);
 
     if (controller) {
       try {
         controller.stop();
+        controller.dispose();
       } catch (err) {
         console.error('Error stopping controller', controller.name, err);
       }
@@ -105,9 +117,25 @@ export default class Matrix {
       throw new Error(`Controller ${id} not found`);
     }
 
-    row.options = JSON.parse(row.options);
+    // Before the active check, so a disabled controller's secrets still get
+    // moved out of plaintext.
+    this.hydrateController(row);
 
-    const newController = this.createController(row);
+    this._controller_errors.delete(id);
+
+    if (!row.active) {
+      return undefined;
+    }
+
+    let newController: Controller;
+
+    try {
+      newController = this.createController(row);
+    } catch (err: any) {
+      this._controller_errors.set(id, err?.message || String(err));
+      throw err;
+    }
+
     this.controllers.set(newController.name, newController);
 
     return newController;
@@ -155,6 +183,55 @@ export default class Matrix {
     return this.controllers.get(name);
   }
 
+  controllerFields(kind: string): SettingField[] {
+    return this._available_controllers.get(kind)?.fields || [];
+  }
+
+  controllerTunnel(kind: string): ControllerTunnel | undefined {
+    return this._available_controllers.get(kind)?.tunnel;
+  }
+
+  controllerTools(kind: string): ControllerTool[] {
+    return this._available_controllers.get(kind)?.tools || [];
+  }
+
+  listenerFields(kind: string): SettingField[] {
+    return this._available_listeners.get(kind)?.fields || [];
+  }
+
+  // Turns a raw controllers/listeners row into what its class's constructor
+  // takes: parsed `options` plus decrypted `secrets`. Any secret field still
+  // sitting in plaintext in the row's options (rows from before the secrets
+  // table, the seeds in db.ts, or options edited by hand) is moved into the
+  // secrets table here and stripped from the row.
+  private hydrate<Row extends IController | IListener>(owner: SecretOwner, fields: SettingField[], row: Row): Row {
+    const parsed = typeof row.options === "string" ? JSON.parse(row.options) : row.options;
+    const { options, secrets } = splitSecrets(fields, parsed);
+
+    if (JSON.stringify(options) !== JSON.stringify(parsed)) {
+      saveSecrets(owner, row.id, fields, secrets);
+      db.prepare(`UPDATE ${owner}s SET options = ? WHERE id = ?`).run(JSON.stringify(options), row.id);
+      // The plaintext would otherwise linger in the file's freed pages, and
+      // in the write-ahead log until it's next reset.
+      db.exec("VACUUM");
+      db.pragma("wal_checkpoint(TRUNCATE)");
+      console.log(`Moved plaintext secrets for ${owner} '${row.name}' into encrypted storage.`);
+    }
+
+    row.options = options;
+    row.secrets = loadSecrets(owner, row.id, fields);
+
+    return row;
+  }
+
+  hydrateController(row: IController): IController {
+    return this.hydrate("controller", this.controllerFields(row.kind), row);
+  }
+
+  hydrateListener(row: IListener): IListener {
+    return this.hydrate("listener", this.listenerFields(row.kind), row);
+  }
+
   createListener(config: IListener): Listener {
     const listenerClass = this._available_listeners.get(config.kind);
 
@@ -179,13 +256,19 @@ export default class Matrix {
     const rows = db.prepare("SELECT * FROM controllers").all() as IController[];
 
     rows.forEach((row) => {
-      row.options = JSON.parse(row.options);
       try {
+        this.hydrateController(row);
+
+        if (!row.active) {
+          return;
+        }
+
         this.controllers.set(
           row.name,
           this.createController(row)
         );
-      } catch (err) {
+      } catch (err: any) {
+        this._controller_errors.set(row.id, err?.message || String(err));
         console.error('Error loading controller', row.name, err);
       }
     });
@@ -195,11 +278,18 @@ export default class Matrix {
     const rows = db.prepare("SELECT * FROM listeners").all() as IListener[];
 
     rows.forEach((row) => {
+      try {
+        this.hydrateListener(row);
+      } catch (err: any) {
+        this._listener_errors.set(row.id, err?.message || String(err));
+        console.error('Error loading listener', row.name, err);
+        return;
+      }
+
       if (!row.active) {
         return;
       }
 
-      row.options = JSON.parse(row.options);
       try {
         this._listeners.set(
           row.name,

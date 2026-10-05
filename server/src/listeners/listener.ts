@@ -3,25 +3,44 @@ import db from "../db.js";
 import { ListenerRule } from "./listener_rule.js";
 import Matrix from "../matrix.js";
 import History from "../history.js";
+import { saveSecrets } from "../settings.js";
 
 abstract class Listener implements IListener {
   private _matrix: Matrix;
   private _id: number;
   private _kind: string;
   private _options: object;
+  private _secrets: { [key: string]: string };
   private _name: string;
   private _rules: Map<number, ListenerRule> = new Map();
   private _vm: ivm.Isolate;
   private _active: number = 1;
 
-  constructor(matrix: Matrix, { id, kind, name, options }: ListenerConfig) {
+  constructor(matrix: Matrix, { id, kind, name, options, secrets }: ListenerConfig) {
     this._id = id;
     this._name = name;
     this._kind = kind;
     this._options = options;
+    this._secrets = secrets || {};
     this._matrix = matrix;
 
     this._vm = new ivm.Isolate({ memoryLimit: 64 });
+  }
+
+  // The settings this kind of listener needs. Fields marked `secret` are
+  // stored encrypted and handed to the constructor as `secrets` rather than
+  // as part of `options`.
+  static get fields(): SettingField[] {
+    return [];
+  }
+
+  protected secret(key: string): string | undefined { return this._secrets[key]; }
+
+  // Replaces stored secrets from inside the listener itself (e.g. a
+  // refreshed access token), both in the secrets table and in memory.
+  protected storeSecrets(changes: { [key: string]: string }): void {
+    saveSecrets("listener", this.id, (this.constructor as typeof Listener).fields, changes);
+    Object.assign(this._secrets, changes);
   }
 
   get active(): number { return this._active; }

@@ -6,6 +6,10 @@ import knex from "./knex.js";
 import morgan from "morgan";
 import { exchangeCodeForToken } from "./twitch_oauth.js";
 import { ManualListener } from "./listeners/manual_listener.js";
+import { authRequired, isAuthenticated, login, logout, requireAdmin } from "./auth.js";
+import { loadSecrets, saveSecrets, secretsPresent, splitSecrets, validateFields, type SecretChanges } from "./settings.js";
+import { tunnelDetails, tunnelLoginAllowed } from "./tunnel.js";
+import { createInvite, findInviteByToken, findInviteForController, revokeInvite, type Invite } from "./invites.js";
 
 const app = express();
 // .env has already been loaded by this point - db.ts calls loadEnvFile() and
@@ -28,8 +32,26 @@ const pendingTwitchAuthorizations = new Map<string, { listenerId: number, create
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+// Request bodies are logged, so anything that looks like a credential is
+// blanked out first - whole objects under a matching key included.
+const SENSITIVE_KEY = /pass|secret|token|authorization/i;
+
+function redact(value: any): any {
+  if (Array.isArray(value))
+    return value.map(redact);
+
+  if (value && typeof value === "object") {
+    return Object.fromEntries(Object.entries(value).map(([key, inner]) => {
+      return [key, SENSITIVE_KEY.test(key) ? "[redacted]" : redact(inner)];
+    }));
+  }
+
+  return value;
+}
+
 morgan.token('body', (req: Request) => {
-  return JSON.stringify(req.body);
+  return JSON.stringify(redact(req.body));
 });
 
 app.use(morgan('common'));
@@ -54,8 +76,165 @@ function nullIfUndefined<T>(value: T | undefined): T | null {
   return value === undefined ? null : value;
 }
 
-app.get("/api/controllers", (_: Request, res: Response) => {
-  res.json([...matrix.controllers.values()]);
+// A controller's `options` as submitted - an object, or JSON text from an
+// editor field. Throws on text that isn't valid JSON.
+function parseOptions(value: unknown): any {
+  if (value === undefined || value === null || value === '')
+    return null;
+
+  return typeof value === "string" ? JSON.parse(value) : value;
+}
+
+function liveController(id: number) {
+  return matrix.controllers.values().find((controller) => controller.id === id);
+}
+
+app.get("/api/session", (req: Request, res: Response) => {
+  res.json({ authRequired: authRequired(), authenticated: isAuthenticated(req) });
+});
+
+app.post("/api/session", async (req: Request, res: Response) => {
+  res.sendStatus(await login(req, res) ? 204 : 401);
+});
+
+app.delete("/api/session", (req: Request, res: Response) => {
+  logout(req, res);
+  res.sendStatus(204);
+});
+
+// The invite page's endpoints. The token travels in the Authorization
+// header (the page reads it from its URL fragment) rather than in the URL,
+// so it stays out of this server's access log and any proxy's along the way.
+async function inviteContext(req: Request) {
+  const [scheme, token] = (req.headers.authorization || "").split(" ");
+  const invite = scheme === "Bearer" && token ? findInviteByToken(token) : undefined;
+
+  if (!invite)
+    return undefined;
+
+  const row = await knex("controllers").where("id", "=", invite.controllerId).first();
+
+  if (!row)
+    return undefined;
+
+  const fields = matrix.controllerFields(row.kind);
+
+  return {
+    invite,
+    row,
+    options: splitSecrets(fields, JSON.parse(row.options || "{}") || {}).options,
+    fields,
+    inviteFields: fields.filter((field) => field.invite)
+  };
+}
+
+function inviteResponse(context: NonNullable<Awaited<ReturnType<typeof inviteContext>>>) {
+  const { invite, row, options, fields, inviteFields } = context;
+  const present = secretsPresent("controller", row.id, fields);
+
+  return {
+    controller: { name: row.name, kind: row.kind },
+    fields: inviteFields,
+    options: Object.fromEntries(inviteFields.filter((field) => !field.secret).map((field) => [field.key, options[field.key]])),
+    secrets: Object.fromEntries(inviteFields.filter((field) => field.secret).map((field) => [field.key, present[field.key]])),
+    status: controllerStatus(row),
+    tunnel: tunnelDetails(row.id, matrix.controllerTunnel(row.kind)) || null,
+    expiresAt: invite.expiresAt
+  };
+}
+
+app.get("/api/invite", async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const context = await inviteContext(req);
+
+    if (!context)
+      return res.status(404).send("This invite link is invalid or has expired.");
+
+    res.json(inviteResponse(context));
+  } catch (err) {
+    next(err);
+  }
+});
+
+app.put("/api/invite", async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const context = await inviteContext(req);
+
+    if (!context)
+      return res.status(404).send("This invite link is invalid or has expired.");
+
+    const { row, fields, inviteFields } = context;
+    const submittedOptions = req.body?.options || {};
+    const submittedSecrets = req.body?.secrets || {};
+    const options = { ...context.options };
+    const secrets: SecretChanges = {};
+
+    // Only the fields this kind marks `invite` are taken from the request -
+    // everything else about the controller stays as its owner set it.
+    for (const field of inviteFields) {
+      if (field.secret)
+        secrets[field.key] = submittedSecrets[field.key];
+      else if (field.key in submittedOptions)
+        options[field.key] = submittedOptions[field.key];
+    }
+
+    const problem = validateFields(inviteFields, options, secrets, {
+      enforceRequired: true,
+      secretsAlreadySet: secretsPresent("controller", row.id, fields)
+    });
+
+    if (problem)
+      return res.status(400).send(problem);
+
+    await knex("controllers").where("id", "=", row.id).update({ options: JSON.stringify(options) });
+    saveSecrets("controller", row.id, inviteFields, secrets);
+
+    try {
+      await matrix.reloadController(row.id);
+    } catch (err) {
+      console.error('Error reloading controller after invite update', row.id, err);
+    }
+
+    res.json(inviteResponse({ ...context, options }));
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Called by the sish tunnel server (--authentication-password-request-url)
+// with {user, password, remote_addr} for every ssh login - a 200 lets the
+// client in, anything else turns it away. See tunnel.ts.
+app.post("/api/tunnel/auth", (req: Request, res: Response) => {
+  res.sendStatus(tunnelLoginAllowed(req.body?.user, req.body?.password) ? 200 : 401);
+});
+
+// Everything under /api registered below this line needs an admin session
+// (when THEBIT_ADMIN_PASSWORD is set - see auth.ts).
+app.use("/api", requireAdmin);
+
+function controllerStatus(row: { id: number, active: number }): ControllerStatus {
+  if (!row.active)
+    return { state: "disabled" };
+
+  return liveController(row.id)?.status
+    || { state: "stopped", error: matrix.controllerErrors.get(row.id) };
+}
+
+// Listed from the database rather than from the running controllers, so
+// disabled ones (which aren't loaded) still show up.
+app.get("/api/controllers", async (_: Request, res: Response, next: NextFunction) => {
+  try {
+    const rows = await knex("controllers").select("*");
+
+    rows.forEach((row) => {
+      row.options = splitSecrets(matrix.controllerFields(row.kind), JSON.parse(row.options)).options;
+      row.status = controllerStatus(row);
+    });
+
+    res.json(rows);
+  } catch (err) {
+    next(err);
+  }
 });
 
 app.get("/api/controllers/available", (_: Request, res: Response) => {
@@ -63,6 +242,18 @@ app.get("/api/controllers/available", (_: Request, res: Response) => {
 
   res.json(available);
 });
+
+// The settings each controller kind needs, keyed by kind - what the
+// controller form is built from.
+app.get("/api/controllers/fields", (_: Request, res: Response) => {
+  res.json(Object.fromEntries(
+    Array.from(matrix.availableControllers.keys()).map((kind) => [kind, matrix.controllerFields(kind)])
+  ));
+});
+
+function describeInvite(invite: Invite | undefined) {
+  return invite ? { createdAt: invite.createdAt, expiresAt: invite.expiresAt } : null;
+}
 
 app.get("/api/controllers/:id", async (req: Request, res: Response, next: NextFunction) => {
   try {
@@ -76,7 +267,15 @@ app.get("/api/controllers/:id", async (req: Request, res: Response, next: NextFu
     if (!row)
       return res.sendStatus(404);
 
-    row.options = JSON.parse(row.options);
+    const fields = matrix.controllerFields(row.kind);
+
+    // Secret values never leave the server - only whether each one is set.
+    row.options = splitSecrets(fields, JSON.parse(row.options)).options;
+    row.secrets = secretsPresent("controller", id, fields);
+    row.status = controllerStatus(row);
+    row.tools = matrix.controllerTools(row.kind);
+    row.tunnelUrl = tunnelDetails(id, matrix.controllerTunnel(row.kind))?.url || null;
+    row.invite = describeInvite(findInviteForController(id));
 
     res.json(row);
   } catch (err) {
@@ -84,18 +283,45 @@ app.get("/api/controllers/:id", async (req: Request, res: Response, next: NextFu
   }
 });
 
+// Splits a submitted controller or listener into what goes in its row and
+// what goes in the secrets table. Secrets can arrive under `secrets`, or
+// inline in `options` under a secret field's key - either way they're kept
+// out of the row. Returns a message instead if the submission is unusable.
+function settingsSubmission(fields: SettingField[], body: any): { options: any, secrets: SecretChanges, fields: SettingField[] } | string {
+  let parsed: any;
+
+  try {
+    parsed = parseOptions(body.options);
+  } catch {
+    return "'options' is not valid JSON.";
+  }
+
+  const split = splitSecrets(fields, parsed);
+  const secrets = { ...split.secrets, ...(body.secrets || {}) };
+  const problem = validateFields(fields, split.options, secrets);
+
+  return problem || { options: split.options, secrets, fields };
+}
+
 app.post("/api/controllers", async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { name, kind, options } = req.body;
+    const { active, name, kind } = req.body;
+    const submission = settingsSubmission(matrix.controllerFields(req.body.kind), req.body);
+
+    if (typeof submission === "string")
+      return res.status(400).send(submission);
 
     const inserted = await knex("controllers").insert({
-      name, kind, options: normalizeJSON(options)
+      name, kind, options: normalizeJSON(submission.options),
+      active: active === undefined ? 1 : Number(Boolean(Number(active)))
     }).returning('*');
 
     if (inserted.length <= 0)
       return res.sendStatus(500);
 
     const row = inserted[0];
+
+    saveSecrets("controller", row.id, submission.fields, submission.secrets);
 
     try {
       await matrix.reloadController(row.id);
@@ -113,20 +339,29 @@ app.post("/api/controllers", async (req: Request, res: Response, next: NextFunct
 app.put("/api/controllers/:id", async (req: Request, res: Response, next: NextFunction) => {
   try {
     const id = parseInt(req.params.id);
-    const { name, kind, options } = req.body;
+    const { active, name, kind } = req.body;
 
     if (!id)
       return res.sendStatus(400);
+
+    const submission = settingsSubmission(matrix.controllerFields(req.body.kind), req.body);
+
+    if (typeof submission === "string")
+      return res.status(400).send(submission);
 
     const changedRows = await knex("controllers").where('id', '=', id)
       .update({
         name: name,
         kind: kind,
-        options: normalizeJSON(options)
+        options: normalizeJSON(submission.options),
+        // Left as it is when the request doesn't say.
+        active: active === undefined ? undefined : Number(Boolean(Number(active)))
       });
 
     if (changedRows <= 0)
       return res.sendStatus(500);
+
+    saveSecrets("controller", id, submission.fields, submission.secrets);
 
     try {
       await matrix.reloadController(id);
@@ -140,12 +375,110 @@ app.put("/api/controllers/:id", async (req: Request, res: Response, next: NextFu
   }
 });
 
+// Just the live connection state, for pages that poll it.
+app.get("/api/controllers/:id/status", async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const row = await knex("controllers").where("id", "=", parseInt(req.params.id) || 0).first();
+
+    if (!row)
+      return res.sendStatus(404);
+
+    res.json(controllerStatus(row));
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Switches a controller on or off without touching the rest of its
+// settings. Off tears down its connection; on loads it again.
+app.put("/api/controllers/:id/active", async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const id = parseInt(req.params.id);
+
+    if (!id || typeof req.body?.active !== "boolean")
+      return res.status(400).send("'active' must be true or false.");
+
+    const changedRows = await knex("controllers").where("id", "=", id).update({ active: req.body.active ? 1 : 0 });
+
+    if (changedRows <= 0)
+      return res.sendStatus(404);
+
+    try {
+      await matrix.reloadController(id);
+    } catch (err) {
+      console.error('Error reloading controller', id, err);
+    }
+
+    res.json(controllerStatus({ id, active: req.body.active ? 1 : 0 }));
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Runs one of the tools the controller's kind declares (see
+// Controller.tools) against the live controller - i.e. with its saved
+// settings, not whatever is sitting unsaved in a form.
+app.post("/api/controllers/:id/tools/:key", async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const controller = liveController(parseInt(req.params.id));
+
+    if (!controller)
+      return res.status(404).send("This controller isn't running.");
+
+    res.json(await controller.runTool(req.params.key));
+  } catch (err) {
+    next(err);
+  }
+});
+
+const DEFAULT_INVITE_DAYS = 7;
+const MAX_INVITE_DAYS = 90;
+
+// Creates the controller's invite link, replacing (and so invalidating) any
+// existing one. The token is only ever returned here - it isn't stored, so
+// a lost link means creating a new one.
+app.post("/api/controllers/:id/invite", async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const id = parseInt(req.params.id);
+
+    if (!id || !await knex("controllers").where("id", "=", id).first())
+      return res.sendStatus(404);
+
+    const days = Number(req.body?.expiresInDays) || DEFAULT_INVITE_DAYS;
+
+    if (days <= 0 || days > MAX_INVITE_DAYS)
+      return res.status(400).send(`'expiresInDays' must be between 1 and ${MAX_INVITE_DAYS}.`);
+
+    const { token, invite } = createInvite(id, days * 24 * 60 * 60 * 1000);
+
+    res.status(201).json({
+      ...describeInvite(invite),
+      token,
+      // Where this server is reachable from outside, if it differs from
+      // wherever the admin happens to be browsing it from.
+      publicUrl: process.env.PUBLIC_URL || null
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+app.delete("/api/controllers/:id/invite", (req: Request, res: Response) => {
+  const id = parseInt(req.params.id);
+
+  if (!id)
+    return res.sendStatus(400);
+
+  revokeInvite(id);
+  res.sendStatus(204);
+});
+
 app.get("/api/listeners", async (_: Request, res: Response, next: NextFunction) => {
   try {
     const rows = await knex("listeners").select("*");
 
     rows.forEach((row) => {
-      row.options = JSON.parse(row.options);
+      row.options = splitSecrets(matrix.listenerFields(row.kind), JSON.parse(row.options)).options;
       row.status = listenerStatus(row);
     });
 
@@ -199,6 +532,14 @@ app.get("/api/listeners/available", (_: Request, res: Response) => {
   res.json(available);
 });
 
+// The settings each listener kind needs, keyed by kind - what the listener
+// form is built from.
+app.get("/api/listeners/fields", (_: Request, res: Response) => {
+  res.json(Object.fromEntries(
+    Array.from(matrix.availableListeners.keys()).map((kind) => [kind, matrix.listenerFields(kind)])
+  ));
+});
+
 app.get("/api/listeners/:id", async (req: Request, res: Response, next: NextFunction) => {
   try {
     const id = parseInt(req.params.id);
@@ -211,7 +552,11 @@ app.get("/api/listeners/:id", async (req: Request, res: Response, next: NextFunc
     if (!row)
       return res.sendStatus(404);
 
-    row.options = JSON.parse(row.options);
+    const fields = matrix.listenerFields(row.kind);
+
+    // Secret values never leave the server - only whether each one is set.
+    row.options = splitSecrets(fields, JSON.parse(row.options)).options;
+    row.secrets = secretsPresent("listener", id, fields);
 
     res.json(row);
   } catch (err) {
@@ -241,16 +586,22 @@ app.get("/api/listeners/:id/rules", async (req: Request, res: Response, next: Ne
 
 app.post("/api/listeners", async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { name, kind, options } = req.body;
+    const { name, kind } = req.body;
+    const submission = settingsSubmission(matrix.listenerFields(kind), req.body);
+
+    if (typeof submission === "string")
+      return res.status(400).send(submission);
 
     const inserted = await knex("listeners").insert({
-      name, kind, options: normalizeJSON(options)
+      name, kind, options: normalizeJSON(submission.options)
     }).returning('*');
 
     if (inserted.length <= 0)
       return res.sendStatus(500);
 
     const row = inserted[0];
+
+    saveSecrets("listener", row.id, submission.fields, submission.secrets);
 
     try {
       await matrix.reloadListener(row.id);
@@ -268,21 +619,28 @@ app.post("/api/listeners", async (req: Request, res: Response, next: NextFunctio
 app.put("/api/listeners/:id", async (req: Request, res: Response, next: NextFunction) => {
   try {
     const id = parseInt(req.params.id);
-    const { active, name, kind, options } = req.body;
+    const { active, name, kind } = req.body;
 
     if (!id)
       return res.sendStatus(400);
+
+    const submission = settingsSubmission(matrix.listenerFields(kind), req.body);
+
+    if (typeof submission === "string")
+      return res.status(400).send(submission);
 
     const changedRows = await knex("listeners").where('id', '=', id)
       .update({
         name: name,
         kind: kind,
-        options: normalizeJSON(options),
+        options: normalizeJSON(submission.options),
         active: active === undefined ? 1 : active
       });
 
     if (changedRows <= 0)
       return res.sendStatus(500);
+
+    saveSecrets("listener", id, submission.fields, submission.secrets);
 
     try {
       await matrix.reloadListener(id);
@@ -453,23 +811,31 @@ app.get("/oauth/twitch/callback", async (req: Request, res: Response) => {
       return res.status(404).send(`Listener ${pending.listenerId} no longer exists.`);
     }
 
+    const fields = matrix.listenerFields(row.kind);
     const options = JSON.parse(row.options);
+    const { clientSecret } = loadSecrets("listener", row.id, fields);
 
-    if (!options.clientId || !options.clientSecret) {
-      return res.status(400).send(`Listener '${row.name}' is missing 'clientId'/'clientSecret' in its options.`);
+    if (!options.clientId || !clientSecret) {
+      return res.status(400).send(`Listener '${row.name}' is missing its client ID or client secret.`);
     }
 
     const tokenResponse = await exchangeCodeForToken({
       clientId: options.clientId,
-      clientSecret: options.clientSecret,
+      clientSecret,
       code,
       redirectUri: TWITCH_OAUTH_REDIRECT_URI
     });
 
+    // The tokens go into encrypted storage; only their expiry (not a
+    // secret, and what the listener schedules its refresh from) stays in
+    // the listener's options.
+    saveSecrets("listener", row.id, fields, {
+      accessToken: tokenResponse.access_token,
+      refreshToken: tokenResponse.refresh_token
+    });
+
     const updatedOptions = {
       ...options,
-      accessToken: tokenResponse.access_token,
-      refreshToken: tokenResponse.refresh_token,
       accessTokenExpiresAt: Date.now() + tokenResponse.expires_in * 1000
     };
 
@@ -590,4 +956,7 @@ app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
 
 app.listen(PORT, () => {
   console.log(`Server is running on http://localhost:${PORT}`);
+
+  if (!authRequired())
+    console.warn("THEBIT_ADMIN_PASSWORD is not set - the app and its API are open to anyone who can reach this port. Set it before exposing this server beyond a network you trust.");
 });
