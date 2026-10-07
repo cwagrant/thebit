@@ -57,6 +57,13 @@
     fetchListenerRules();
   })
 
+  // The listener is still being fetched when this component is set up, so
+  // its id isn't known yet when newRule is created - without this, a new
+  // rule would be saved against listener 0 and never run.
+  watch(() => props.listener.id, (id) => {
+    newRule.value.listener_id = id;
+  }, { immediate: true })
+
   onMounted(() => {
     console.log("show rules", props.listener)
     fetchListenerRules();

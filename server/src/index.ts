@@ -7,8 +7,9 @@ import morgan from "morgan";
 import { exchangeCodeForToken } from "./twitch_oauth.js";
 import { ManualListener } from "./listeners/manual_listener.js";
 import { authRequired, isAuthenticated, login, logout, requireAdmin } from "./auth.js";
-import { loadSecrets, saveSecrets, secretsPresent, splitSecrets, validateFields, type SecretChanges } from "./settings.js";
+import { loadSecrets, normalizeFields, saveSecrets, secretsPresent, splitSecrets, validateFields, type SecretChanges } from "./settings.js";
 import { tunnelDetails, tunnelLoginAllowed } from "./tunnel.js";
+import { attachStatusFeed } from "./status_feed.js";
 import { createInvite, findInviteByToken, findInviteForController, revokeInvite, type Invite } from "./invites.js";
 
 const app = express();
@@ -178,6 +179,8 @@ app.put("/api/invite", async (req: Request, res: Response, next: NextFunction) =
         options[field.key] = submittedOptions[field.key];
     }
 
+    normalizeFields(inviteFields, options);
+
     const problem = validateFields(inviteFields, options, secrets, {
       enforceRequired: true,
       secretsAlreadySet: secretsPresent("controller", row.id, fields)
@@ -298,6 +301,9 @@ function settingsSubmission(fields: SettingField[], body: any): { options: any, 
 
   const split = splitSecrets(fields, parsed);
   const secrets = { ...split.secrets, ...(body.secrets || {}) };
+
+  normalizeFields(fields, split.options);
+
   const problem = validateFields(fields, split.options, secrets);
 
   return problem || { options: split.options, secrets, fields };
@@ -526,6 +532,21 @@ app.post("/api/listeners/:id/reconnect", async (req: Request, res: Response, nex
   }
 });
 
+// Tries connecting with the listener's saved settings and reports how it
+// went - separate from, and without disturbing, the running listener.
+app.post("/api/listeners/:id/test", async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const id = parseInt(req.params.id);
+
+    if (!id || !await knex("listeners").where("id", "=", id).first())
+      return res.sendStatus(404);
+
+    res.json(await matrix.testListener(id));
+  } catch (err) {
+    next(err);
+  }
+});
+
 app.get("/api/listeners/available", (_: Request, res: Response) => {
   const available = Array.from(matrix.availableListeners.keys());
 
@@ -557,6 +578,7 @@ app.get("/api/listeners/:id", async (req: Request, res: Response, next: NextFunc
     // Secret values never leave the server - only whether each one is set.
     row.options = splitSecrets(fields, JSON.parse(row.options)).options;
     row.secrets = secretsPresent("listener", id, fields);
+    row.testable = matrix.listenerTestable(row.kind);
 
     res.json(row);
   } catch (err) {
@@ -654,9 +676,18 @@ app.put("/api/listeners/:id", async (req: Request, res: Response, next: NextFunc
   }
 });
 
+// A rule saved against a listener that doesn't exist would sit there
+// looking fine and never run.
+async function listenerExists(id: unknown): Promise<boolean> {
+  return Number.isInteger(id) && Boolean(await knex("listeners").where("id", "=", id as number).first());
+}
+
 app.post("/api/rules", async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { active, listener_id, message, rule, version, condition } = req.body;
+
+    if (!await listenerExists(listener_id))
+      return res.status(400).send("'listener_id' must be the id of an existing listener.");
 
     const ids = await knex("listener_rules").insert({
       listener_id,
@@ -688,6 +719,9 @@ app.put("/api/rules/:id", async (req: Request, res: Response, next: NextFunction
   try {
     const id = parseInt(req.params.id);
     const { active, listener_id, message, rule, version, condition } = req.body;
+
+    if (!await listenerExists(listener_id))
+      return res.status(400).send("'listener_id' must be the id of an existing listener.");
 
     const changedRows = await knex("listener_rules").where('id', '=', id)
       .update({
@@ -954,9 +988,28 @@ app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
   res.sendStatus(500);
 });
 
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   console.log(`Server is running on http://localhost:${PORT}`);
 
   if (!authRequired())
     console.warn("THEBIT_ADMIN_PASSWORD is not set - the app and its API are open to anyone who can reach this port. Set it before exposing this server beyond a network you trust.");
 });
+
+// Live statuses for the pages that show them, behind the same admin session
+// as the rest of the API. Listed from the database, like the list routes, so
+// disabled controllers and listeners (which aren't loaded) are included.
+attachStatusFeed(
+  server,
+  async () => {
+    const [controllers, listeners] = await Promise.all([
+      knex("controllers").select("id", "active"),
+      knex("listeners").select("id", "active")
+    ]);
+
+    return {
+      controllers: Object.fromEntries(controllers.map((row) => [row.id, controllerStatus(row)])),
+      listeners: Object.fromEntries(listeners.map((row) => [row.id, listenerStatus(row)]))
+    };
+  },
+  (req) => isAuthenticated(req as Request)
+);

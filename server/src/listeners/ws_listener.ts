@@ -2,6 +2,7 @@ import WebSocket from "ws";
 import Client from "../client.js";
 import { Listener } from "./listener.js";
 import type Matrix from "../matrix.js";
+import { probeWebSocket } from "./connection_test.js";
 
 class WSListener extends Listener {
   private _socket!: Client;
@@ -24,6 +25,17 @@ class WSListener extends Listener {
       }
     ];
   }
+
+  static testConnection = async (config: ListenerConfig): Promise<ToolResult> => {
+    const address = config.options.address;
+
+    if (!address)
+      return { ok: false, message: "No WebSocket URL is set." };
+
+    return probeWebSocket(String(address), {
+      onOpen: (_socket, finish) => finish({ ok: true, message: `Connected to ${address}.` })
+    });
+  };
 
   get socket() {
     return this._socket;

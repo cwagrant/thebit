@@ -9,6 +9,8 @@
     moveTransitionFilterName: string;
     filters: string[];
     sources: string[];
+    defaultWidth?: number;
+    defaultHeight?: number;
     minScale?: number;
     maxScale?: number;
     [key: string]: unknown;
@@ -33,8 +35,8 @@
 
   const inputValue = (event: Event) => (event.target as HTMLInputElement).value;
 
-  // A cleared scale box means "no limit set", not zero.
-  const scaleValue = (event: Event) => {
+  // A cleared number box means "not set", not zero.
+  const numberValue = (event: Event) => {
     const value = inputValue(event);
 
     return value === "" ? undefined : Number(value);
@@ -63,7 +65,7 @@
         >
       </div>
       <p class="help">
-        The scene's name in OBS.
+        The scene's name in OBS. Must differ from its game source.
       </p>
     </div>
 
@@ -82,7 +84,8 @@
         >
       </div>
       <p class="help">
-        The source in that scene that gets moved and resized.
+        The source in that scene that gets moved and resized. "Set up scenes"
+        creates it as a scene of its own, for your game capture to go inside.
       </p>
     </div>
 
@@ -104,6 +107,53 @@
         The Move Source filter on the scene that animates the game source.
       </p>
     </div>
+
+    <div class="columns mb-0">
+      <div class="column">
+        <div class="field">
+          <label
+            class="label"
+            :for="`scene-${index}-default-width`"
+          >Default Width</label>
+          <div class="control">
+            <input
+              :id="`scene-${index}-default-width`"
+              class="input"
+              type="number"
+              min="1"
+              step="any"
+              :value="scene.defaultWidth ?? ''"
+              @input="updateScene(index, { defaultWidth: numberValue($event) })"
+            >
+          </div>
+        </div>
+      </div>
+      <div class="column">
+        <div class="field">
+          <label
+            class="label"
+            :for="`scene-${index}-default-height`"
+          >Default Height</label>
+          <div class="control">
+            <input
+              :id="`scene-${index}-default-height`"
+              class="input"
+              type="number"
+              min="1"
+              step="any"
+              :value="scene.defaultHeight ?? ''"
+              @input="updateScene(index, { defaultHeight: numberValue($event) })"
+            >
+          </div>
+        </div>
+      </div>
+    </div>
+    <p class="help mb-4">
+      The game source's size when untouched, in canvas pixels. Setting
+      either one resizes the source in OBS when you save and centre-aligns
+      it where it already is, so it grows and shrinks around its middle.
+      Leave both blank to keep its size and alignment as they are in OBS.
+    </p>
 
     <div class="columns">
       <div class="column">
@@ -137,7 +187,7 @@
               min="0"
               step="any"
               :value="scene.minScale ?? ''"
-              @input="updateScene(index, { minScale: scaleValue($event) })"
+              @input="updateScene(index, { minScale: numberValue($event) })"
             >
           </div>
         </div>
@@ -156,7 +206,7 @@
               min="0"
               step="any"
               :value="scene.maxScale ?? ''"
-              @input="updateScene(index, { maxScale: scaleValue($event) })"
+              @input="updateScene(index, { maxScale: numberValue($event) })"
             >
           </div>
         </div>

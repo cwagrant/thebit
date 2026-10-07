@@ -1,5 +1,6 @@
 <script setup lang="ts">
-  import {ref, onMounted, onUnmounted} from "vue";
+  import {ref, onMounted} from "vue";
+  import { useLiveStatuses } from '@/statusFeed';
 
   type ListenerStatus = {
     state: "connected" | "connecting" | "disconnected" | "running" | "disabled" | "stopped";
@@ -12,8 +13,6 @@
     kind: string;
     status: ListenerStatus;
   }
-
-  const STATUS_POLL_INTERVAL_MS = 3000;
 
   const STATUS_TAGS: Record<ListenerStatus["state"], string> = {
     connected: "is-success",
@@ -28,7 +27,6 @@
 
   const listeners = ref<Listener[]>([]);
   const reconnecting = ref<Set<number>>(new Set());
-  let pollTimer: ReturnType<typeof setInterval> | undefined;
 
   const fetchListeners = async () => {
     const response = await fetch("/api/listeners")
@@ -51,12 +49,10 @@
 
   onMounted(() => {
     fetchListeners();
-    pollTimer = setInterval(fetchListeners, STATUS_POLL_INTERVAL_MS);
   })
 
-  onUnmounted(() => {
-    clearInterval(pollTimer);
-  })
+  // Statuses arrive from the server as they change.
+  useLiveStatuses("listeners", listeners, () => fetchListeners());
 </script>
 
 <template>

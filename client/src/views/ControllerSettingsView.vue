@@ -1,5 +1,6 @@
 <script setup lang="ts">
   import { ref, inject, computed, watch, onMounted, onUnmounted, type Ref } from "vue";
+  import { useLiveStatuses } from '@/statusFeed';
   import { useRoute } from 'vue-router';
   import {
     authRequiredKey, controllerFieldsKey, STATUS_TAGS,
@@ -29,12 +30,10 @@
     invite: Invite | null;
   }
 
-  const STATUS_POLL_INTERVAL_MS = 3000;
-
   const controller = ref<Controller>({ id: 0, name: "", kind: "", active: 1, options: {}, secrets: {}, status: null, tools: [], tunnelUrl: null, invite: null });
   const toolResults = ref<Record<string, ToolResult>>({});
   const runningTools = ref<Set<string>>(new Set());
-  let pollTimer: ReturnType<typeof setInterval> | undefined;
+
   const secretChanges = ref<SecretChanges>({});
   const error = ref("");
   const saved = ref(false);
@@ -78,19 +77,9 @@
     secretChanges.value = {};
   };
 
-  // Polled on its own rather than by refetching the controller, which would
-  // overwrite whatever is being typed into the form.
-  const fetchStatus = async () => {
-    const id = controller.value.id;
-
-    if (!id)
-      return;
-
-    const response = await fetch(`/api/controllers/${id}/status`);
-
-    if (response.ok && controller.value.id === id)
-      controller.value.status = await response.json();
-  };
+  // The connection status arrives from the server as it changes, and only
+  // ever touches `status` - never what's being typed into the form.
+  useLiveStatuses("controllers", computed(() => [controller.value]));
 
   const runTool = async (tool: ControllerTool) => {
     runningTools.value.add(tool.key);
@@ -127,7 +116,7 @@
 
     saved.value = true;
     // The controller reconnects with its new settings after a save - the
-    // status poll picks up how that went.
+    // live status picks up how that went.
     await fetchController();
   };
 
@@ -157,20 +146,26 @@
     }
   };
 
+  let copiedTimer: ReturnType<typeof setTimeout> | undefined;
+
+  // The "Copied" label only shows briefly, so the button reads as ready to
+  // be pressed again.
   const copyInvite = async () => {
     await navigator.clipboard.writeText(inviteLink.value);
     inviteCopied.value = true;
+
+    clearTimeout(copiedTimer);
+    copiedTimer = setTimeout(() => { inviteCopied.value = false; }, 2000);
   };
 
   const formatDate = (timestamp: number) => new Date(timestamp).toLocaleString();
 
   onMounted(() => {
     fetchController();
-    pollTimer = setInterval(fetchStatus, STATUS_POLL_INTERVAL_MS);
   });
 
   onUnmounted(() => {
-    clearInterval(pollTimer);
+    clearTimeout(copiedTimer);
   });
 </script>
 

@@ -34,6 +34,11 @@ abstract class Listener implements IListener {
     return [];
   }
 
+  // Kinds that connect to something define this: a one-off attempt to
+  // connect with the given (saved) settings, entirely separate from any
+  // running instance, reporting whether it worked and why not if it didn't.
+  static testConnection?: (config: ListenerConfig) => Promise<ToolResult>;
+
   protected secret(key: string): string | undefined { return this._secrets[key]; }
 
   // Replaces stored secrets from inside the listener itself (e.g. a

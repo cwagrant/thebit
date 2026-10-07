@@ -4,9 +4,11 @@ import { Listener } from "./listener.js";
 import type { ListenerRule } from "./listener_rule.js";
 import type Matrix from "../matrix.js";
 import { refreshAccessToken as refreshTwitchAccessToken } from "../twitch_oauth.js";
+import { probeWebSocket } from "./connection_test.js";
 
 const DEFAULT_EVENTSUB_URL = "wss://eventsub.wss.twitch.tv/ws";
 const SUBSCRIPTIONS_URL = "https://api.twitch.tv/helix/eventsub/subscriptions";
+const VALIDATE_URL = "https://id.twitch.tv/oauth2/validate";
 const DEFAULT_KEEPALIVE_TIMEOUT_SECONDS = 10;
 // Refresh this far ahead of the token's actual expiry, so a slightly slow
 // refresh call (or an inaccurate clock) doesn't leave a gap where Helix
@@ -125,6 +127,41 @@ class TwitchEventSubListener extends Listener {
     ];
   }
 
+  // Checks the saved access token with Twitch, then that an EventSub session
+  // can be opened. Deliberately doesn't refresh an expired token itself:
+  // that would swap the refresh token out from under the running listener.
+  static testConnection = async (config: ListenerConfig): Promise<ToolResult> => {
+    const address = String(config.options.address || DEFAULT_EVENTSUB_URL);
+    const accessToken = config.secrets?.accessToken;
+    let tokenNote = "";
+
+    if (!accessToken)
+      return { ok: false, message: "There's no access token yet - use 'Authorize with Twitch' first." };
+
+    // A mock server (e.g. the Twitch CLI's) has no real token to check.
+    if (TwitchEventSubListener.isRealTwitchHost(address)) {
+      try {
+        const { data } = await axios.get(VALIDATE_URL, { headers: { "Authorization": `OAuth ${accessToken}` } });
+
+        if (data.client_id !== config.options.clientId)
+          return { ok: false, message: "The access token belongs to a different Twitch application than the client ID set here." };
+
+        tokenNote = data.login ? ` The access token is valid, for ${data.login}.` : " The access token is valid.";
+      } catch (err: any) {
+        return err?.response?.status === 401
+          ? { ok: false, message: "Twitch rejected the access token - it has expired or been revoked. Use 'Authorize with Twitch' again." }
+          : { ok: false, message: `Couldn't check the access token with Twitch: ${err?.message || err}` };
+      }
+    }
+
+    return probeWebSocket(address, {
+      onMessage: (message, _socket, finish) => {
+        if (message?.metadata?.message_type === "session_welcome")
+          finish({ ok: true, message: `Connected to ${TwitchEventSubListener.isRealTwitchHost(address) ? "Twitch EventSub" : address}.${tokenNote}` });
+      }
+    });
+  };
+
   start(): void {
     if (!this.active)
       return;
@@ -167,6 +204,10 @@ class TwitchEventSubListener extends Listener {
     this._ws?.removeAllListeners();
     this._ws?.close();
     this._connectingSocket?.removeAllListeners();
+    // Terminating a socket that's still connecting makes ws emit an "error"
+    // for it - with every listener just removed, that would be an unhandled
+    // "error" event, which takes the whole process down.
+    this._connectingSocket?.on("error", () => { });
     this._connectingSocket?.terminate();
     this._connectingSocket = undefined;
   }

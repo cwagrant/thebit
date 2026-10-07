@@ -49,7 +49,11 @@ services:
       - traefik.http.services.thebit.loadbalancer.server.port=3131
 
   sish:
-    image: antoniomika/sish:latest
+    # Pinned: v2.24.0 (what "latest" pointed at in October 2026) answers every
+    # WebSocket upgrade through a tunnel with 502 Bad Gateway - it stopped
+    # handing its tunnel dialer to the WebSocket forwarder - which is the one
+    # thing these tunnels carry. Check that's fixed before moving past this.
+    image: antoniomika/sish:v2.23.0
     restart: unless-stopped
     networks:
       - traefik

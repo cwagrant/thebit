@@ -8,6 +8,7 @@ import { loadSecrets, saveSecrets, splitSecrets, type SecretOwner } from "./sett
 interface ListenerConstructor {
   new(matrix: Matrix, config: IListener): Listener
   fields?: SettingField[]
+  testConnection?: (config: ListenerConfig) => Promise<ToolResult>
 }
 
 interface ControllerConstructor {
@@ -193,6 +194,30 @@ export default class Matrix {
 
   controllerTools(kind: string): ControllerTool[] {
     return this._available_controllers.get(kind)?.tools || [];
+  }
+
+  listenerTestable(kind: string): boolean {
+    return typeof this._available_listeners.get(kind)?.testConnection === "function";
+  }
+
+  // Tries connecting with a listener's saved settings, without touching the
+  // running listener (if there is one - this works for disabled ones too).
+  async testListener(id: number): Promise<ToolResult> {
+    const row = await knex("listeners").where('id', id).first();
+
+    if (!row)
+      throw new Error(`Listener ${id} not found`);
+
+    const testConnection = this._available_listeners.get(row.kind)?.testConnection;
+
+    if (!testConnection)
+      return { ok: false, message: `A '${row.kind}' listener has nothing to connect to.` };
+
+    try {
+      return await testConnection(this.hydrateListener(row));
+    } catch (err: any) {
+      return { ok: false, message: err?.message || String(err) };
+    }
   }
 
   listenerFields(kind: string): SettingField[] {

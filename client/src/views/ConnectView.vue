@@ -39,24 +39,50 @@
     });
   };
 
-  const applyInvite = (data: Invite, { resetForm }: { resetForm: boolean }) => {
+  // What's saved in the field the tunnel's address goes in, when that's a
+  // different address from the tunnel's.
+  const otherSavedAddress = ref("");
+
+  const applyInvite = (data: Invite, { resetForm, preferTunnel = false }: { resetForm: boolean, preferTunnel?: boolean }) => {
     invite.value = data;
 
     if (resetForm) {
       options.value = { ...data.options };
       secrets.value = {};
 
-      // Nothing entered yet - assume they'll use the tunnel.
-      if (data.tunnel && !options.value[data.tunnel.field])
+      const saved = data.tunnel ? data.options[data.tunnel.field] : undefined;
+
+      otherSavedAddress.value = typeof saved === "string" && saved !== data.tunnel?.url ? saved : "";
+
+      // Arriving on the page, the tunnel's address is what goes in the box -
+      // it's what the command above sets up. After a save, the box keeps
+      // showing what was saved, tunnel or not.
+      if (data.tunnel && (preferTunnel || !saved))
         useTunnel();
     }
   };
 
-  const copied = ref("");
+  const useSavedAddress = () => {
+    const tunnel = invite.value?.tunnel;
 
+    if (tunnel)
+      options.value[tunnel.field] = otherSavedAddress.value;
+  };
+
+  const COPIED_LABEL_MS = 2000;
+
+  const copied = ref("");
+  let copiedTimer: ReturnType<typeof setTimeout> | undefined;
+
+  // The "Copied" label only shows briefly, so the button reads as ready
+  // again - it can be pressed as often as needed, e.g. after something else
+  // has since been copied.
   const copy = async (what: string, text: string) => {
     await navigator.clipboard.writeText(text);
     copied.value = what;
+
+    clearTimeout(copiedTimer);
+    copiedTimer = setTimeout(() => { copied.value = ""; }, COPIED_LABEL_MS);
   };
 
   const useTunnel = () => {
@@ -71,7 +97,7 @@
       const response = await request();
 
       if (response.ok)
-        applyInvite(await response.json(), { resetForm: true });
+        applyInvite(await response.json(), { resetForm: true, preferTunnel: true });
     }
 
     loading.value = false;
@@ -121,7 +147,10 @@
   };
 
   onMounted(fetchInvite);
-  onUnmounted(() => clearTimeout(pollTimer));
+  onUnmounted(() => {
+    clearTimeout(pollTimer);
+    clearTimeout(copiedTimer);
+  });
 </script>
 
 <template>
@@ -200,6 +229,14 @@
             Use the tunnel's address below
           </button>
         </div>
+        <p
+          v-if="otherSavedAddress && options[invite.tunnel.field] === invite.tunnel.url"
+          class="help"
+        >
+          The tunnel's address is filled in below; press Save to use it. The
+          address saved at the moment is <code>{{ otherSavedAddress }}</code> -
+          <a @click.prevent="useSavedAddress">keep that one instead</a>.
+        </p>
       </div>
 
       <div

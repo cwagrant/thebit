@@ -73,6 +73,24 @@ export function secretsPresent(owner: SecretOwner, id: number, fields: SettingFi
   );
 }
 
+// A WebSocket address is often copied from somewhere that shows it as a web
+// address (a tunnel prints "https://..."), which points at the same place:
+// https is wss, http is ws.
+export function toWebSocketUrl(value: string): string {
+  return value.trim().replace(/^http(s?):\/\//i, "ws$1://");
+}
+
+// Tidies submitted values in place before they're validated and stored.
+export function normalizeFields(fields: SettingField[], options: any): void {
+  if (!options || typeof options !== "object")
+    return;
+
+  for (const field of fields) {
+    if (field.type === "ws-url" && typeof options[field.key] === "string")
+      options[field.key] = toWebSocketUrl(options[field.key]);
+  }
+}
+
 // Returns a message describing the first problem with the submitted values,
 // or undefined if they're fine. Only values actually present are checked
 // unless `enforceRequired` is set (the invite page, which submits every
@@ -105,6 +123,11 @@ export function validateFields(
 
       if (value.some((scene: any) => typeof scene?.name !== "string" || scene.name.trim() === ""))
         return `Every entry in '${field.label}' needs a name.`;
+
+      const isSizeOrUnset = (n: unknown) => n === undefined || n === null || (typeof n === "number" && Number.isFinite(n) && n > 0);
+
+      if (value.some((scene: any) => !isSizeOrUnset(scene.defaultWidth) || !isSizeOrUnset(scene.defaultHeight)))
+        return `The default width and height in '${field.label}' must be numbers above zero.`;
 
       continue;
     }

@@ -67,6 +67,19 @@ The listener automatically refreshes its access token in the background once it 
 
 **Chat-based events instead of dedicated subscription types.** `channel.chat.message` and `channel.chat.notification` need `user:read:chat` (and likely `user:bot`) scope authorized by whoever's identity is doing the reading, rather than needing the broadcaster specifically - if that identity is a moderator (or the broadcaster) of the target channel, you can self-authorize this against your own account with no involvement from the channel owner at all. Set `chatUserId` in the listener's options to that identity's user id - it gets merged into every rule's condition as `user_id`, alongside `broadcaster_user_id`. `channel.chat.notification` covers subs/resubs/gift subs/raids with a structured `notice_type` payload (a real alternative to `channel.subscribe`), and `channel.chat.message`'s `message.fragments` array marks cheermote tokens with their bit values, which a rule can sum to detect cheers - at the cost of receiving every chat message rather than a pre-filtered cheer-only stream.
 
+### Overture listener
+
+An `overture` listener receives a campaign's events from Overture (the same Laravel Reverb feed the op-connector NodeCG bundle relays). It needs the Reverb host, port and app key, the campaign ID, and your Overture API token, which authorizes listening to the campaign's private channel.
+
+A rule's message is the event's short name - the last part of the PHP class name it's broadcast as, so `App\Broadcasting\Events\DonationReceived` is matched by a rule for `DonationReceived`. The rule's script receives the event's data as `$0`:
+
+```js
+const event = $0;
+return { uid: event.id, controller: "MainTech", action: "shrink", path: "TransformGame1", magnitude: 0.1 };
+```
+
+Only the campaign's own channel (`campaign.<campaignId>`) is listened to.
+
 ### Secrets, admin login and invite links
 
 Values a controller or listener kind marks as secret (the OBS WebSocket password, a Twitch listener's client secret and access/refresh tokens, a Socket.IO listener's auth token) are stored encrypted in the `secrets` table rather than in the row's options, and are never sent back to a browser. A Socket.IO listener's token is its own `token` setting, sent to the server as `auth.token`. The encryption key comes from `THEBIT_SECRET_KEY`, or is generated into `thebit.key` next to the database on first run. Back the key up - without it the stored secrets can't be decrypted.

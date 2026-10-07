@@ -21,7 +21,9 @@ export default defineConfig({
   server: {
     proxy: {
       '/api': {
-        target: apiTarget
+        target: apiTarget,
+        // The live status feed (/api/events) is a WebSocket.
+        ws: true
       },
       '/oauth': {
         target: apiTarget

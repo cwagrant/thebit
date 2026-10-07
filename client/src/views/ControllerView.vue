@@ -1,6 +1,7 @@
 <script setup lang="ts">
-  import {ref, onMounted, onUnmounted} from "vue";
+  import {ref, onMounted} from "vue";
   import { STATUS_TAGS, type ControllerStatus } from '@/settings';
+  import { useLiveStatuses } from '@/statusFeed';
 
   type Controller = {
     id: number;
@@ -10,8 +11,6 @@
     options: object;
     status?: ControllerStatus;
   }
-
-  const STATUS_POLL_INTERVAL_MS = 3000;
 
   type Listener = {
     id: number;
@@ -23,7 +22,6 @@
 
   const controllers = ref<Controller[]>([]);
   const manualListeners = ref<Listener[]>([]);
-  let pollTimer: ReturnType<typeof setInterval> | undefined;
 
   const fetchControllers = async() => {
     const response = await fetch("/api/controllers")
@@ -78,12 +76,10 @@
   onMounted(() => {
    fetchControllers();
    fetchManualListeners();
-   pollTimer = setInterval(fetchControllers, STATUS_POLL_INTERVAL_MS);
   })
 
-  onUnmounted(() => {
-    clearInterval(pollTimer);
-  })
+  // Statuses arrive from the server as they change.
+  useLiveStatuses("controllers", controllers, () => fetchControllers());
 </script>
 
 <template>

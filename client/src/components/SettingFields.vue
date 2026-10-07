@@ -19,6 +19,18 @@
 
   const inputValue = (event: Event) => (event.target as HTMLInputElement).value;
 
+  // A WebSocket address pasted in its web form (a tunnel prints
+  // "https://...") points at the same place: https is wss, http is ws. The
+  // server makes the same swap on save; doing it here shows it happening.
+  const fieldValue = (field: SettingField, event: Event) => {
+    const input = event.target as HTMLInputElement;
+
+    if (field.type === "ws-url")
+      input.value = input.value.replace(/^\s*http(s?):\/\//i, "ws$1://");
+
+    return input.value;
+  };
+
   const setSecret = (key: string, value: string) => {
     if (value === "")
       delete secrets.value[key];
@@ -132,7 +144,7 @@
         :value="options[field.key] ?? ''"
         :placeholder="field.placeholder"
         :required="field.required"
-        @input="options[field.key] = inputValue($event)"
+        @input="options[field.key] = fieldValue(field, $event)"
       >
     </div>
 

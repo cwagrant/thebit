@@ -90,6 +90,7 @@ class Config {
       "socketio": "./listeners/socketio_listener.js",
       "ws": "./listeners/ws_listener.js",
       "twitch-eventsub": "./listeners/twitch_eventsub_listener.js",
+      "overture": "./listeners/overture_listener.js",
       "manual": "./listeners/manual_listener.js"
     };
   }
