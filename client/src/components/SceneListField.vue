@@ -1,6 +1,7 @@
 <script setup lang="ts">
   import { inject } from "vue";
-  import { sceneStateKey, type SceneState } from '@/settings';
+  import { sceneStateKey } from '@/settings';
+  import SceneSavedState from '@/components/SceneSavedState.vue';
   import StringListInput from '@/components/StringListInput.vue';
 
   type SceneConfig = {
@@ -35,42 +36,6 @@
 
   const saved = inject(sceneStateKey, undefined);
   const showSaved = saved !== undefined;
-
-  const round = (value: number) => Math.round(value * 1000) / 1000;
-  const pair = (a: number, b: number, joiner: string) => a === b && joiner === " × " ? `${round(a)}` : `${round(a)}${joiner}${round(b)}`;
-
-  const savedRows = (state: SceneState | undefined): [string, string][] | undefined => {
-    const item = state?.sceneItem;
-
-    if (!item)
-      return undefined;
-
-    const limit = (value: number | null | undefined) => typeof value === "number" ? `${round(value)}` : "none";
-    const rows: [string, string][] = [
-      ["Minimum scale", limit(item.minScale)],
-      ["Maximum scale", limit(item.maxScale)]
-    ];
-
-    if (item.currentScale)
-      rows.push(["Current scale", pair(item.currentScale.x, item.currentScale.y, " × ")]);
-
-    if (item.defaultScale)
-      rows.push(["Default scale", pair(item.defaultScale.x, item.defaultScale.y, " × ")]);
-
-    if (item.currentSize)
-      rows.push(["Current size", `${round(item.currentSize.width)} × ${round(item.currentSize.height)}`]);
-
-    if (item.defaultSize)
-      rows.push(["Default size", `${round(item.defaultSize.width)} × ${round(item.defaultSize.height)}`]);
-
-    if (item.currentPosition)
-      rows.push(["Position", pair(item.currentPosition.x, item.currentPosition.y, ", ")]);
-
-    if (typeof item.rotation === "number")
-      rows.push(["Rotation", `${round(item.rotation)}°`]);
-
-    return rows;
-  };
 
   const inputValue = (event: Event) => (event.target as HTMLInputElement).value;
 
@@ -194,36 +159,60 @@
           it where it already is, so it grows and shrinks around its middle.
           Leave both blank to keep its size and alignment as they are in OBS.
         </p>
+
+        <div class="columns mb-0">
+          <div class="column">
+            <div class="field">
+              <label
+                class="label"
+                :for="`scene-${index}-min-scale`"
+              >Default Minimum Scale</label>
+              <div class="control">
+                <input
+                  :id="`scene-${index}-min-scale`"
+                  class="input"
+                  type="number"
+                  min="0"
+                  step="any"
+                  :value="scene.minScale ?? ''"
+                  @input="updateScene(index, { minScale: numberValue($event) })"
+                >
+              </div>
+            </div>
+          </div>
+          <div class="column">
+            <div class="field">
+              <label
+                class="label"
+                :for="`scene-${index}-max-scale`"
+              >Default Maximum Scale</label>
+              <div class="control">
+                <input
+                  :id="`scene-${index}-max-scale`"
+                  class="input"
+                  type="number"
+                  min="0"
+                  step="any"
+                  :value="scene.maxScale ?? ''"
+                  @input="updateScene(index, { maxScale: numberValue($event) })"
+                >
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <p class="help mb-4">
+          The limits a scene starts out with. Once the controller has saved
+          state for the scene, the limits saved there are the ones in force -
+          rules change those with <code>setMinScale</code> and
+          <code>setMaxScale</code>, and changing the defaults here doesn't.
+        </p>
       </div>
       <div
         v-if="showSaved"
         class="column is-one-third saved-state"
       >
-        <h3 class="has-text-weight-semibold mb-2">
-          Saved state
-        </h3>
-        <table
-          v-if="savedRows(saved?.[scene.name])"
-          class="table is-narrow is-size-7 mb-0"
-        >
-          <tbody>
-            <tr
-              v-for="[label, value] in savedRows(saved?.[scene.name])"
-              :key="label"
-            >
-              <th>{{ label }}</th>
-              <td>{{ value }}</td>
-            </tr>
-          </tbody>
-        </table>
-        <p
-          v-else
-          class="help"
-        >
-          Nothing is saved for this scene yet. That happens once the
-          controller is connected and finds the scene and its game source in
-          OBS.
-        </p>
+        <SceneSavedState :state="saved?.[scene.name]" />
       </div>
     </div>
 
@@ -243,54 +232,6 @@
         />
       </div>
     </div>
-
-    <div class="columns mb-0">
-      <div class="column">
-        <div class="field">
-          <label
-            class="label"
-            :for="`scene-${index}-min-scale`"
-          >Default Minimum Scale</label>
-          <div class="control">
-            <input
-              :id="`scene-${index}-min-scale`"
-              class="input"
-              type="number"
-              min="0"
-              step="any"
-              :value="scene.minScale ?? ''"
-              @input="updateScene(index, { minScale: numberValue($event) })"
-            >
-          </div>
-        </div>
-      </div>
-      <div class="column">
-        <div class="field">
-          <label
-            class="label"
-            :for="`scene-${index}-max-scale`"
-          >Default Maximum Scale</label>
-          <div class="control">
-            <input
-              :id="`scene-${index}-max-scale`"
-              class="input"
-              type="number"
-              min="0"
-              step="any"
-              :value="scene.maxScale ?? ''"
-              @input="updateScene(index, { maxScale: numberValue($event) })"
-            >
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <p class="help mb-4">
-      The limits a scene starts out with. Once the controller has saved
-      state for the scene, the limits saved there are the ones in force -
-      rules change those with <code>setMinScale</code> and
-      <code>setMaxScale</code>, and changing the defaults here doesn't.
-    </p>
 
     <button
       class="button is-danger is-outlined"

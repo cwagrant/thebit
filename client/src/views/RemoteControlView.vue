@@ -3,7 +3,10 @@
   import { useRoute } from 'vue-router';
   import api, { errorMessage } from '@/api';
   import ActionsView from '@/components/ActionsView.vue';
+  import SceneSavedState from '@/components/SceneSavedState.vue';
   import { sendActionKey, type Actions, type ActionRequest } from '@/action';
+  import { useLiveControllerStates } from '@/statusFeed';
+  import type { SceneState } from '@/settings';
 
   type Rule = {
     id: number;
@@ -13,6 +16,7 @@
   }
 
   type ControllerActions = {
+    id: number;
     name: string;
     kind: string;
     actions: Actions;
@@ -22,6 +26,7 @@
   const controllers = ref<ControllerActions[]>([]);
   const triggeringId = ref<number | null>(null);
   const route = useRoute();
+  const sceneStates = useLiveControllerStates<Record<string, SceneState>>();
 
   type Toast = {
     id: number;
@@ -150,7 +155,29 @@
     :key="controller.name"
     class="box"
   >
+    <template v-if="sceneStates[controller.id] && !Array.isArray(controller.actions)">
+      <p>{{ controller.name }} ({{ controller.kind }})</p>
+      <div
+        v-for="(actions, scene) in controller.actions"
+        :key="scene"
+        class="columns"
+      >
+        <div class="column">
+          <ActionsView
+            :title="String(scene)"
+            :path-component="String(scene)"
+            :actions="actions"
+            :path="[]"
+            :controller="controller.name"
+          />
+        </div>
+        <div class="column is-one-third">
+          <SceneSavedState :state="sceneStates[controller.id]?.[scene]" />
+        </div>
+      </div>
+    </template>
     <ActionsView
+      v-else
       :title="`${controller.name} (${controller.kind})`"
       :actions="controller.actions"
       :path="[]"

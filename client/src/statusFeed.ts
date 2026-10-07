@@ -118,3 +118,10 @@ export function useLiveControllerState<State>(id: Ref<number>): ComputedRef<Stat
 
   return computed(() => controllerStates.value[id.value] as State | undefined);
 }
+
+export function useLiveControllerStates<State>(): ComputedRef<Record<string, State | undefined>> {
+  onMounted(acquire);
+  onUnmounted(release);
+
+  return computed(() => controllerStates.value as Record<string, State | undefined>);
+}

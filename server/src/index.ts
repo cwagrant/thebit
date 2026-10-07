@@ -865,6 +865,7 @@ app.get("/api/listeners/:id/actions", (req: Request, res: Response) => {
     return res.status(400).send("This is not a live 'manual' listener.");
 
   res.json(listener.controllers.map((controller) => ({
+    id: controller.id,
     name: controller.name,
     kind: controller.kind,
     actions: controller.getActions()
