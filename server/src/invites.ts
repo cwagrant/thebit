@@ -1,11 +1,6 @@
 import crypto from "node:crypto";
 import db from "./db.js";
 
-// Invite links: a random token that lets its holder fill in one
-// controller's connection details (the fields its kind marks `invite`) and
-// nothing else. A controller has at most one live invite - creating another
-// replaces it - and only the token's hash is stored.
-
 export interface Invite {
   controllerId: number;
   createdAt: number;

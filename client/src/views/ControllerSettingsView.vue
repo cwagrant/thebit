@@ -1,12 +1,17 @@
 <script setup lang="ts">
-  import { ref, inject, computed, watch, onMounted, onUnmounted, type Ref } from "vue";
-  import { useLiveStatuses } from '@/statusFeed';
-  import { useRoute } from 'vue-router';
+  import { ref, inject, provide, computed, watch, nextTick, onMounted, type Ref } from "vue";
+  import { useLiveStatuses, useLiveControllerState } from '@/statusFeed';
+  import { useRoute, useRouter } from 'vue-router';
+  import api, { errorMessage } from '@/api';
   import {
-    authRequiredKey, controllerFieldsKey, STATUS_TAGS,
-    type ToolResult, type ControllerTool, type ControllerStatus, type SecretChanges
+    authRequiredKey, controllerFieldsKey, sceneStateKey,
+    type SceneState, type ToolResult, type ControllerTool, type ControllerStatus, type SecretChanges
   } from '@/settings';
   import SettingsForm from '@/components/SettingsForm.vue';
+  import SettingFields from '@/components/SettingFields.vue';
+  import FormFooter from '@/components/FormFooter.vue';
+  import StatusTag from '@/components/StatusTag.vue';
+  import CopyField from '@/components/CopyField.vue';
 
   type Invite = {
     createdAt: number;
@@ -19,13 +24,9 @@
     kind: string;
     active: number;
     options: Record<string, unknown>;
-    // Which secret fields have a saved value - the values themselves never
-    // come back from the server.
     secrets: Record<string, boolean>;
     status: ControllerStatus | null;
     tools: ControllerTool[];
-    // The address this controller's device gets when published through the
-    // tunnel server, if one is configured.
     tunnelUrl: string | null;
     invite: Invite | null;
   }
@@ -37,19 +38,64 @@
   const secretChanges = ref<SecretChanges>({});
   const error = ref("");
   const saved = ref(false);
-  // Only held from the moment a link is created until the page is left -
-  // the server keeps a hash of the token, not the token.
   const inviteLink = ref("");
-  const inviteCopied = ref(false);
 
   const controllerKinds = inject<Ref<string[]>>("controllerKinds");
   const controllerFields = inject(controllerFieldsKey);
   const authRequired = inject(authRequiredKey);
   const route = useRoute();
+  const router = useRouter();
 
-  const invitable = computed(() => {
-    return (controllerFields?.value[controller.value.kind] ?? []).some((field) => field.invite);
+  const kindFields = computed(() => controllerFields?.value[controller.value.kind] ?? []);
+  const invitable = computed(() => kindFields.value.some((field) => field.invite));
+
+  const sceneFields = computed(() => kindFields.value.filter((field) => field.type === "scenes"));
+  const controllerTabFields = computed(() => {
+    return Object.fromEntries(
+      Object.entries(controllerFields?.value ?? {})
+        .map(([kind, fields]) => [kind, fields.filter((field) => field.type !== "scenes")])
+    );
   });
+
+  type Tab = "controller" | "scenes" | "tools";
+
+  const tabs = computed(() => {
+    const available: { key: Tab, label: string }[] = [{ key: "controller", label: "Controller" }];
+
+    if (sceneFields.value.length > 0)
+      available.push({ key: "scenes", label: "Scenes" });
+
+    if (controller.value.tools.length > 0 || invitable.value)
+      available.push({ key: "tools", label: "Tools" });
+
+    return available;
+  });
+
+  const selectedTab = ref(route.query.tab as Tab | undefined);
+  const activeTab = computed<Tab>(() => {
+    return tabs.value.find((tab) => tab.key === selectedTab.value)?.key ?? "controller";
+  });
+
+  watch(selectedTab, (tab) => {
+    router.replace({ query: { ...route.query, tab: tab === "controller" ? undefined : tab } });
+  });
+
+  const form = ref<HTMLFormElement>();
+  let revealing = false;
+
+  const revealInvalid = async (event: Event) => {
+    const tab = (event.target as HTMLElement).closest<HTMLElement>("[data-tab]")?.dataset.tab as Tab | undefined;
+
+    if (revealing || !tab || tab === activeTab.value)
+      return;
+
+    revealing = true;
+    selectedTab.value = tab;
+
+    await nextTick();
+    form.value?.reportValidity();
+    revealing = false;
+  };
 
   watch(
     () => route.params.id,
@@ -60,36 +106,34 @@
     }
   );
 
+  provide(sceneStateKey, useLiveControllerState<Record<string, SceneState>>(computed(() => controller.value.id)));
+
   const fetchController = async () => {
     const { id } = route.params;
 
     if (!id)
       return;
 
-    const response = await fetch(`/api/controllers/${id}`);
+    try {
+      const { data } = await api.get(`/controllers/${id}`);
 
-    if (!response.ok)
-      return;
-
-    const data = await response.json();
-
-    controller.value = { ...data, options: data.options ?? {}, tools: data.tools ?? [] };
-    secretChanges.value = {};
+      controller.value = { ...data, options: data.options ?? {}, tools: data.tools ?? [] };
+      secretChanges.value = {};
+    } catch {
+    }
   };
 
-  // The connection status arrives from the server as it changes, and only
-  // ever touches `status` - never what's being typed into the form.
   useLiveStatuses("controllers", computed(() => [controller.value]));
 
   const runTool = async (tool: ControllerTool) => {
     runningTools.value.add(tool.key);
 
     try {
-      const response = await fetch(`/api/controllers/${controller.value.id}/tools/${tool.key}`, { method: "POST" });
+      const { data } = await api.post<ToolResult>(`/controllers/${controller.value.id}/tools/${tool.key}`);
 
-      toolResults.value[tool.key] = response.ok
-        ? await response.json()
-        : { ok: false, message: await response.text() || "That couldn't be run." };
+      toolResults.value[tool.key] = data;
+    } catch (err) {
+      toolResults.value[tool.key] = { ok: false, message: errorMessage(err, "That couldn't be run.") };
     } finally {
       runningTools.value.delete(tool.key);
     }
@@ -101,71 +145,44 @@
     error.value = "";
     saved.value = false;
 
-    const response = await fetch(`/api/controllers/${id}`, {
-      method: "PUT",
-      headers: {
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({ name, kind, active, options, secrets: secretChanges.value })
-    });
-
-    if (!response.ok) {
-      error.value = await response.text() || "Failed to update controller.";
+    try {
+      await api.put(`/controllers/${id}`, { name, kind, active, options, secrets: secretChanges.value });
+    } catch (err) {
+      error.value = errorMessage(err, "Failed to update controller.");
       return;
     }
 
     saved.value = true;
-    // The controller reconnects with its new settings after a save - the
-    // live status picks up how that went.
     await fetchController();
   };
 
   const createInvite = async () => {
-    const response = await fetch(`/api/controllers/${controller.value.id}/invite`, { method: "POST" });
+    try {
+      const { data } = await api.post(`/controllers/${controller.value.id}/invite`);
+      const { token, publicUrl, ...invite } = data;
 
-    if (!response.ok) {
-      error.value = await response.text() || "Failed to create an invite link.";
-      return;
+      inviteLink.value = `${(publicUrl || window.location.origin).replace(/\/$/, "")}/connect#${token}`;
+      controller.value.invite = invite;
+    } catch (err) {
+      error.value = errorMessage(err, "Failed to create an invite link.");
     }
-
-    const { token, publicUrl, ...invite } = await response.json();
-
-    // The token goes in the fragment, which browsers never send to a server,
-    // so it stays out of access logs along the way.
-    inviteLink.value = `${(publicUrl || window.location.origin).replace(/\/$/, "")}/connect#${token}`;
-    inviteCopied.value = false;
-    controller.value.invite = invite;
   };
 
   const revokeInvite = async () => {
-    const response = await fetch(`/api/controllers/${controller.value.id}/invite`, { method: "DELETE" });
+    try {
+      await api.delete(`/controllers/${controller.value.id}/invite`);
 
-    if (response.ok) {
       inviteLink.value = "";
       controller.value.invite = null;
+    } catch (err) {
+      error.value = errorMessage(err, "Failed to revoke the invite link.");
     }
-  };
-
-  let copiedTimer: ReturnType<typeof setTimeout> | undefined;
-
-  // The "Copied" label only shows briefly, so the button reads as ready to
-  // be pressed again.
-  const copyInvite = async () => {
-    await navigator.clipboard.writeText(inviteLink.value);
-    inviteCopied.value = true;
-
-    clearTimeout(copiedTimer);
-    copiedTimer = setTimeout(() => { inviteCopied.value = false; }, 2000);
   };
 
   const formatDate = (timestamp: number) => new Date(timestamp).toLocaleString();
 
   onMounted(() => {
     fetchController();
-  });
-
-  onUnmounted(() => {
-    clearTimeout(copiedTimer);
   });
 </script>
 
@@ -180,78 +197,73 @@
       </RouterLink>
     </div>
   </div>
+  <div class="field">
+    <label class="label">Connection</label>
+    <StatusTag :status="controller.status" />
+  </div>
+
+  <div
+    v-if="tabs.length > 1"
+    class="tabs"
+  >
+    <ul>
+      <li
+        v-for="tab in tabs"
+        :key="tab.key"
+        :class="{ 'is-active': tab.key === activeTab }"
+      >
+        <a @click.prevent="selectedTab = tab.key">{{ tab.label }}</a>
+      </li>
+    </ul>
+  </div>
+
   <form
+    v-show="activeTab !== 'tools'"
+    ref="form"
     class="block"
     @submit.prevent="updateController"
+    @invalid.capture="revealInvalid"
   >
-    <div class="field">
-      <label class="label">Connection</label>
-      <span
-        class="tag"
-        :class="controller.status ? STATUS_TAGS[controller.status.state] : ''"
-      >
-        {{ controller.status?.state ?? 'unknown' }}
-      </span>
-      <p
-        v-if="controller.status?.error"
-        class="help is-danger"
-      >
-        {{ controller.status.error }}
-      </p>
+    <div
+      v-show="activeTab === 'controller'"
+      data-tab="controller"
+    >
+      <SettingsForm
+        v-model:name="controller.name"
+        v-model:kind="controller.kind"
+        v-model:active="controller.active"
+        v-model:options="controller.options"
+        v-model:secrets="secretChanges"
+        :kinds="controllerKinds ?? []"
+        :fields-by-kind="controllerTabFields"
+        :secrets-set="controller.secrets"
+        active-help="Switched off, the controller holds no connection and ignores actions sent to it."
+        allow-incomplete
+      />
     </div>
 
-    <SettingsForm
-      v-model:name="controller.name"
-      v-model:kind="controller.kind"
-      v-model:options="controller.options"
-      v-model:secrets="secretChanges"
-      :kinds="controllerKinds ?? []"
-      :fields-by-kind="controllerFields ?? {}"
-      :secrets-set="controller.secrets"
+    <div
+      v-if="sceneFields.length > 0"
+      v-show="activeTab === 'scenes'"
+      data-tab="scenes"
     >
-      <div class="field">
-        <label
-          class="label mt-2"
-          for="active"
-        >Active</label>
-        <div class="control">
-          <input
-            id="active"
-            v-model="controller.active"
-            type="checkbox"
-            :true-value="1"
-            :false-value="0"
-          >
-        </div>
-        <p class="help">
-          Switched off, the controller holds no connection and ignores
-          actions sent to it.
-        </p>
-      </div>
-    </SettingsForm>
+      <SettingFields
+        v-model:options="controller.options"
+        v-model:secrets="secretChanges"
+        :fields="sceneFields"
+        :secrets-set="controller.secrets"
+      />
+    </div>
 
-    <p
-      v-if="error"
-      class="help is-danger"
-    >
-      {{ error }}
-    </p>
-    <p
-      v-else-if="saved"
-      class="help is-success"
-    >
-      Saved.
-    </p>
-    <button
-      type="submit"
-      class="button mt-2 is-primary"
-    >
-      Save
-    </button>
+    <FormFooter
+      :error="error"
+      :saved="saved"
+    />
   </form>
 
   <div
     v-if="controller.tools.length > 0"
+    v-show="activeTab === 'tools'"
     class="box"
   >
     <h2 class="is-size-4">
@@ -301,6 +313,7 @@
 
   <div
     v-if="invitable"
+    v-show="activeTab === 'tools'"
     class="box"
   >
     <h2 class="is-size-4">
@@ -325,25 +338,10 @@
       v-if="inviteLink"
       class="block"
     >
-      <div class="field has-addons">
-        <div class="control is-expanded">
-          <input
-            class="input"
-            type="text"
-            readonly
-            :value="inviteLink"
-            @focus="($event.target as HTMLInputElement).select()"
-          >
-        </div>
-        <div class="control">
-          <button
-            class="button is-primary"
-            @click="copyInvite"
-          >
-            {{ inviteCopied ? 'Copied' : 'Copy' }}
-          </button>
-        </div>
-      </div>
+      <CopyField
+        :key="inviteLink"
+        :value="inviteLink"
+      />
       <p class="help">
         Copy this now - it can't be shown again, only replaced.
       </p>

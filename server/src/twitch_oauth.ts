@@ -2,9 +2,6 @@ import axios from "axios";
 
 const TOKEN_URL = "https://id.twitch.tv/oauth2/token";
 
-// Shared between the OAuth callback route (initial authorization-code
-// exchange) and TwitchEventSubListener (ongoing refresh-token exchange), so
-// both talk to Twitch's token endpoint the same way.
 export interface TwitchTokenResponse {
   access_token: string;
   refresh_token: string;

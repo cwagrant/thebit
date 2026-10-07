@@ -1,6 +1,8 @@
 <script setup lang="ts">
   import {ref, onMounted} from "vue";
+  import api from '@/api';
   import { useLiveStatuses } from '@/statusFeed';
+  import StatusTag from '@/components/StatusTag.vue';
 
   type ListenerStatus = {
     state: "connected" | "connecting" | "disconnected" | "running" | "disabled" | "stopped";
@@ -14,23 +16,12 @@
     status: ListenerStatus;
   }
 
-  const STATUS_TAGS: Record<ListenerStatus["state"], string> = {
-    connected: "is-success",
-    running: "is-success",
-    connecting: "is-warning",
-    disconnected: "is-danger",
-    stopped: "is-danger",
-    // Plain .tag - Bulma 1's "is-light" is the light color, not a muted
-    // variant, and renders white-on-white.
-    disabled: ""
-  };
-
   const listeners = ref<Listener[]>([]);
   const reconnecting = ref<Set<number>>(new Set());
 
   const fetchListeners = async () => {
-    const response = await fetch("/api/listeners")
-    const data = await response.json();
+    const { data } = await api.get<Listener[]>("/listeners");
+
     listeners.value = data;
   }
 
@@ -38,10 +29,10 @@
     reconnecting.value.add(listener.id);
 
     try {
-      const response = await fetch(`/api/listeners/${listener.id}/reconnect`, { method: "POST" });
+      const { data } = await api.post<ListenerStatus>(`/listeners/${listener.id}/reconnect`);
 
-      if (response.ok)
-        listener.status = await response.json();
+      listener.status = data;
+    } catch {
     } finally {
       reconnecting.value.delete(listener.id);
     }
@@ -51,7 +42,6 @@
     fetchListeners();
   })
 
-  // Statuses arrive from the server as they change.
   useLiveStatuses("listeners", listeners, () => fetchListeners());
 </script>
 
@@ -86,18 +76,7 @@
           </td>
           <td> {{ listener.kind }} </td>
           <td>
-            <span
-              class="tag"
-              :class="STATUS_TAGS[listener.status?.state]"
-            >
-              {{ listener.status?.state }}
-            </span>
-            <p
-              v-if="listener.status?.error"
-              class="help is-danger"
-            >
-              {{ listener.status.error }}
-            </p>
+            <StatusTag :status="listener.status" />
           </td>
           <td class="has-text-right">
             <button

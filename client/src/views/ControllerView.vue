@@ -1,7 +1,9 @@
 <script setup lang="ts">
   import {ref, onMounted} from "vue";
-  import { STATUS_TAGS, type ControllerStatus } from '@/settings';
+  import api, { errorMessage } from '@/api';
+  import { type ControllerStatus } from '@/settings';
   import { useLiveStatuses } from '@/statusFeed';
+  import StatusTag from '@/components/StatusTag.vue';
 
   type Controller = {
     id: number;
@@ -24,17 +26,13 @@
   const manualListeners = ref<Listener[]>([]);
 
   const fetchControllers = async() => {
-    const response = await fetch("/api/controllers")
-    const data = await response.json();
+    const { data } = await api.get<Controller[]>("/controllers");
 
     controllers.value = data;
-
   }
 
-  // Remote controls live on active "manual" listeners.
   const fetchManualListeners = async () => {
-    const response = await fetch("/api/listeners")
-    const data: Listener[] = await response.json();
+    const { data } = await api.get<Listener[]>("/listeners");
 
     manualListeners.value = data.filter((listener) => listener.kind === "manual" && listener.active !== 0);
   }
@@ -45,23 +43,17 @@
     toggling.value.add(controller.id);
 
     try {
-      const response = await fetch(`/api/controllers/${controller.id}/active`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ active })
-      });
+      const { data } = await api.put<ControllerStatus>(`/controllers/${controller.id}/active`, { active });
 
-      if (response.ok) {
-        controller.active = active ? 1 : 0;
-        controller.status = await response.json();
-      }
+      controller.active = active ? 1 : 0;
+      controller.status = data;
+    } catch (err) {
+      controller.status = { state: controller.status?.state ?? "unknown", error: errorMessage(err, "That couldn't be changed.") };
     } finally {
       toggling.value.delete(controller.id);
     }
   }
 
-  // Mirrors ManualListener.controllers on the server: a manual listener can
-  // fire every running controller unless its options list specific ones.
   const remoteControlsFor = (controller: Controller) => {
     if (!controller.active)
       return [];
@@ -78,7 +70,6 @@
    fetchManualListeners();
   })
 
-  // Statuses arrive from the server as they change.
   useLiveStatuses("controllers", controllers, () => fetchControllers());
 </script>
 
@@ -111,19 +102,10 @@
           <td>{{ controller.name }}</td>
           <td>{{ controller.kind }}</td>
           <td>
-            <span
+            <StatusTag
               v-if="controller.status"
-              class="tag"
-              :class="STATUS_TAGS[controller.status.state]"
-            >
-              {{ controller.status.state }}
-            </span>
-            <p
-              v-if="controller.status?.error"
-              class="help is-danger"
-            >
-              {{ controller.status.error }}
-            </p>
+              :status="controller.status"
+            />
           </td>
           <td>
             <div class="buttons is-right">

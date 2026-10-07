@@ -10,47 +10,13 @@ const DEFAULT_EVENTSUB_URL = "wss://eventsub.wss.twitch.tv/ws";
 const SUBSCRIPTIONS_URL = "https://api.twitch.tv/helix/eventsub/subscriptions";
 const VALIDATE_URL = "https://id.twitch.tv/oauth2/validate";
 const DEFAULT_KEEPALIVE_TIMEOUT_SECONDS = 10;
-// Refresh this far ahead of the token's actual expiry, so a slightly slow
-// refresh call (or an inaccurate clock) doesn't leave a gap where Helix
-// calls start failing with an expired token.
 const TOKEN_REFRESH_LEAD_TIME_MS = 5 * 60 * 1000;
-// Backoff before retrying a failed refresh. Deliberately not computed from
-// accessTokenExpiresAt - that's already in the past by the time a refresh
-// fails, which would otherwise mean retrying immediately in a tight loop.
 const TOKEN_REFRESH_RETRY_DELAY_MS = 5 * 60 * 1000;
-// Reconnect backoff: 1s, 2s, 4s, ... capped here, so an extended outage
-// (Twitch down, no network at startup) keeps retrying without hammering.
 const RECONNECT_MAX_DELAY_MS = 30 * 1000;
-// How long a connection attempt may sit in the WebSocket handshake before
-// it's abandoned and retried.
 const HANDSHAKE_TIMEOUT_MS = 10 * 1000;
 
-// Twitch's EventSub WebSocket transport speaks its own message envelope
-// (metadata.message_type / payload) rather than the {event, data} shape
-// client.ts assumes, and creating a subscription is an out-of-band Helix
-// API call tied to the connection's session_id rather than something a
-// sandboxed rule script could ever do - so this listener owns its socket
-// directly instead of going through Client/WSListener.
-//
-// Flow: connect -> "session_welcome" gives us a session_id -> create one
-// Helix subscription per rule against that session -> "notification"
-// messages carry the event payload, matched back to a rule by the Twitch
-// subscription id (not the event type alone, since two rules can share a
-// type with different `condition` scoping, e.g. two reward redemption
-// rules for two different reward_ids). Twitch also sends
-// "session_keepalive" on an interval and can ask us to migrate to a new
-// socket via "session_reconnect".
-//
-// When `options.address` points somewhere other than Twitch's own host
-// (e.g. the Twitch CLI's local EventSub WebSocket mock server, for testing),
-// subscription creation is skipped and notifications are matched by event
-// type instead - see handleWelcome/handleNotification.
 class TwitchEventSubListener extends Listener {
   private _ws?: WebSocket;
-  // The socket currently being opened that hasn't received its
-  // session_welcome yet. Tracked separately from _ws (which is only set on
-  // welcome) so a connection that fails before the welcome - e.g. no
-  // network when the server starts - still schedules a retry.
   private _connectingSocket?: WebSocket;
   private _reconnectAttempts: number = 0;
   private _lastError?: string;
@@ -59,9 +25,6 @@ class TwitchEventSubListener extends Listener {
   private _keepaliveTimeoutSeconds: number = DEFAULT_KEEPALIVE_TIMEOUT_SECONDS;
   private _keepaliveTimer?: NodeJS.Timeout;
   private _reconnecting: boolean = false;
-  // Twitch subscription id -> the ids of every rule it feeds. One
-  // subscription can serve several rules, since Twitch refuses a second
-  // subscription with the same type/version/condition on one session.
   private _subscriptionRuleIds: Map<string, number[]> = new Map();
   private _isRealTwitch: boolean = true;
   private _stopped: boolean = false;
@@ -127,9 +90,6 @@ class TwitchEventSubListener extends Listener {
     ];
   }
 
-  // Checks the saved access token with Twitch, then that an EventSub session
-  // can be opened. Deliberately doesn't refresh an expired token itself:
-  // that would swap the refresh token out from under the running listener.
   static testConnection = async (config: ListenerConfig): Promise<ToolResult> => {
     const address = String(config.options.address || DEFAULT_EVENTSUB_URL);
     const accessToken = config.secrets?.accessToken;
@@ -138,7 +98,6 @@ class TwitchEventSubListener extends Listener {
     if (!accessToken)
       return { ok: false, message: "There's no access token yet - use 'Authorize with Twitch' first." };
 
-    // A mock server (e.g. the Twitch CLI's) has no real token to check.
     if (TwitchEventSubListener.isRealTwitchHost(address)) {
       try {
         const { data } = await axios.get(VALIDATE_URL, { headers: { "Authorization": `OAuth ${accessToken}` } });
@@ -184,9 +143,6 @@ class TwitchEventSubListener extends Listener {
   }
 
   stop(): void {
-    // Set before anything else - both connect() and the "close" handler's
-    // reconnect scheduling check this, so nothing started here can result in
-    // a new connection attempt after stop() returns.
     this._stopped = true;
 
     if (this._reconnectTimer) {
@@ -204,9 +160,6 @@ class TwitchEventSubListener extends Listener {
     this._ws?.removeAllListeners();
     this._ws?.close();
     this._connectingSocket?.removeAllListeners();
-    // Terminating a socket that's still connecting makes ws emit an "error"
-    // for it - with every listener just removed, that would be an unhandled
-    // "error" event, which takes the whole process down.
     this._connectingSocket?.on("error", () => { });
     this._connectingSocket?.terminate();
     this._connectingSocket = undefined;
@@ -231,10 +184,6 @@ class TwitchEventSubListener extends Listener {
   }
 
   parseRules(): void {
-    // Rules are already loaded into `this.rules` by the time this runs.
-    // Actual subscriptions can't be created here - Helix requires a live
-    // session_id, which only exists once the socket handshake completes
-    // (see handleWelcome).
   }
 
   private connect(url: string): void {
@@ -257,9 +206,6 @@ class TwitchEventSubListener extends Listener {
       }
 
       if (socket === this._connectingSocket) {
-        // Never got a session_welcome. If this was a Twitch-requested
-        // migration, the old session is about to go away anyway, so give up
-        // on migrating and start a fresh session instead.
         this._connectingSocket = undefined;
         this._reconnecting = false;
         this._lastError ??= "Connection closed before session was established";
@@ -351,25 +297,10 @@ class TwitchEventSubListener extends Listener {
     }
 
     if (this._isRealTwitch && previousSocket) {
-      // This welcome completes a Twitch-requested migration
-      // (session_reconnect). Twitch carries every subscription over to the
-      // new session on its own and asks clients not to recreate them -
-      // doing so only gets 409 "subscription already exists" back.
-      // Notifications keep arriving under the same subscription ids, so the
-      // existing subscription -> rule mapping stays as it is.
       console.debug(`Twitch EventSub listener '${this.name}' migrated to a new session, keeping existing subscriptions`);
     } else if (this._isRealTwitch) {
-      // A brand new session - either the first connect, or reconnecting
-      // after the old socket dropped, in which case Twitch has already
-      // deleted that session's subscriptions along with it.
       this.createSubscriptions();
     } else {
-      // Talking to something other than Twitch's own EventSub host - almost
-      // certainly the Twitch CLI's local mock WebSocket server, used to test
-      // this listener without registering real subscriptions. A real Helix
-      // POST would fail anyway (the mock's session_id means nothing to
-      // Twitch), so skip it and match incoming notifications by event type
-      // instead of subscription id (see handleNotification).
       console.debug(`Twitch EventSub listener '${this.name}' connected to a non-Twitch host, skipping Helix subscription creation`);
     }
   }
@@ -399,12 +330,6 @@ class TwitchEventSubListener extends Listener {
 
   private async handleNotification(message: any): Promise<void> {
     try {
-      // Twitch's EventSub delivery is "at least once" - the same
-      // message_id can arrive more than once, and their docs say to
-      // dedupe on it. This runs before the rule executes at all, and
-      // doesn't depend on the rule script itself producing a stable id -
-      // several event types (channel.cheer among them) have no natural
-      // unique field in their payload to key a `uid` off of.
       const messageId = message.metadata?.message_id;
 
       if (await this.checkHistory(messageId)) {
@@ -415,10 +340,6 @@ class TwitchEventSubListener extends Listener {
       const subscriptionId = message.payload?.subscription?.id;
       const subscriptionType = message.payload?.subscription?.type;
 
-      // Real Twitch traffic is matched by subscription id, since two rules can
-      // share an event type with different `condition` scoping. Mock traffic
-      // never went through a real Helix subscribe call (see handleWelcome), so
-      // there's no id to match against - fall back to matching by event type.
       const rules = this._isRealTwitch
         ? this.findRulesBySubscriptionId(subscriptionId)
         : [...this.rules.values().filter((r) => r.active === 1 && r.message === subscriptionType)];
@@ -466,8 +387,6 @@ class TwitchEventSubListener extends Listener {
   private resetKeepaliveTimer(): void {
     this.clearKeepaliveTimer();
 
-    // Grace period beyond Twitch's advertised keepalive window before we
-    // give up on the connection and reconnect.
     const timeoutMs = (this._keepaliveTimeoutSeconds + 5) * 1000;
 
     this._keepaliveTimer = setTimeout(() => {
@@ -487,9 +406,6 @@ class TwitchEventSubListener extends Listener {
     this._subscriptionRuleIds.clear();
     this._failedSubscriptions = 0;
 
-    // Rules that would produce an identical subscription share one - Twitch
-    // rejects the second as a duplicate, which previously left that rule
-    // silently never firing.
     const groups = new Map<string, ListenerRule[]>();
 
     for (const rule of this.rules.values()) {
@@ -509,18 +425,11 @@ class TwitchEventSubListener extends Listener {
   private subscriptionCondition(rule: ListenerRule): { [key: string]: any } {
     return {
       broadcaster_user_id: this.options.broadcasterUserId,
-      // Chat subscription types (channel.chat.message, channel.chat.notification)
-      // need a `user_id` identifying whose user:read:chat authorization is
-      // being used to read the chat - distinct from broadcaster_user_id, and
-      // not needed at all by most other subscription types.
       ...(this.options.chatUserId ? { user_id: this.options.chatUserId } : {}),
       ...rule.condition
     };
   }
 
-  // Identifies what Twitch considers the same subscription: type, version,
-  // and condition (with keys sorted, so field order in a rule's stored
-  // condition JSON doesn't matter).
   private subscriptionKey(rule: ListenerRule): string {
     const condition = this.subscriptionCondition(rule);
     const sortedCondition = Object.keys(condition).sort().map((key) => [key, condition[key]]);
@@ -528,7 +437,6 @@ class TwitchEventSubListener extends Listener {
     return JSON.stringify([rule.message, rule.version, sortedCondition]);
   }
 
-  // All `rules` share the same type/version/condition (see createSubscriptions).
   private async createSubscription(rules: ListenerRule[]): Promise<void> {
     const [rule] = rules;
     const ruleIds = rules.map((r) => r.id);
@@ -583,12 +491,6 @@ class TwitchEventSubListener extends Listener {
     }
   }
 
-  // Only meaningful once a refresh token exists (set by the /oauth/twitch
-  // callback after the user completes authorization) and we know when the
-  // current access token expires (accessTokenExpiresAt, set at the same
-  // time). Without both, there's nothing to schedule - the configured
-  // accessToken is treated as a long-lived value, e.g. an app access token
-  // maintained outside this process.
   private scheduleTokenRefresh(): void {
     if (this._tokenRefreshTimer) {
       clearTimeout(this._tokenRefreshTimer);
@@ -629,10 +531,6 @@ class TwitchEventSubListener extends Listener {
         refreshToken
       });
 
-      // storeSecrets() persists the new tokens (encrypted) and swaps them in
-      // in memory, so createSubscription/revokeSubscriptions (which always
-      // read the access token fresh) pick up the new one immediately. The
-      // expiry isn't a secret, so it stays in options.
       this.storeSecrets({
         accessToken: tokenResponse.access_token,
         refreshToken: tokenResponse.refresh_token

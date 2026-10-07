@@ -1,26 +1,15 @@
 import type { IncomingMessage, Server } from "node:http";
 import WebSocket, { WebSocketServer } from "ws";
 
-// Pushes controller and listener connection statuses to the browser over a
-// WebSocket (at STATUS_FEED_PATH), so pages showing them don't each have to
-// keep asking.
-//
-// Statuses are worked out on demand rather than announced when they change
-// (see Controller.status / Listener.status), so this checks them on a timer
-// and only sends when something is different from last time. Every message
-// is the whole picture - it's small, and it means a client never has to
-// piece state together from changes it may have missed.
-
 export const STATUS_FEED_PATH = "/api/events";
 
 const CHECK_INTERVAL_MS = 1000;
-// Keeps idle connections from being dropped by proxies in between, and
-// finds clients that went away without closing.
 const PING_INTERVAL_MS = 30 * 1000;
 
 export interface StatusSnapshot {
   controllers: { [id: number]: ControllerStatus };
   listeners: { [id: number]: ListenerStatus };
+  states: { [controllerId: number]: unknown };
 }
 
 export function attachStatusFeed(
@@ -58,8 +47,6 @@ export function attachStatusFeed(
     client.on("error", () => { });
 
     try {
-      // A new client gets the current picture straight away, whether or not
-      // anything has changed lately.
       lastSent = await current();
 
       if (client.readyState === WebSocket.OPEN)

@@ -15,7 +15,6 @@ type SceneItemProps = {
   minScale?: number;
 };
 
-// This is based on OBS's alignments.
 enum Alignment {
   Center,
   CenterLeft,
@@ -54,7 +53,7 @@ class SceneItem {
   minScale: number = -Infinity;
 
   constructor(props: SceneItemProps) {
-    Object.assign(this, props)
+    Object.assign(this, props);
 
     this.currentScale = this.defaultScale;
     this.currentSize = this.defaultSize;
@@ -63,20 +62,18 @@ class SceneItem {
   }
 
   loadState(state: SceneItem): void {
-    this.currentSize = state.currentSize
-    this.defaultSize = state.defaultSize
-    this.currentPosition = state.currentPosition
-    this.defaultPosition = state.defaultPosition
-    this.currentScale = state.currentScale
-    this.defaultScale = state.defaultScale
-    this.alignment = state.alignment
-    this.defaultAlignment = state.defaultAlignment
-    this.maxScale = state.maxScale ?? Infinity
-    this.minScale = state.minScale ?? -Infinity
+    this.currentSize = state.currentSize;
+    this.defaultSize = state.defaultSize;
+    this.currentPosition = state.currentPosition;
+    this.defaultPosition = state.defaultPosition;
+    this.currentScale = state.currentScale;
+    this.defaultScale = state.defaultScale;
+    this.alignment = state.alignment;
+    this.defaultAlignment = state.defaultAlignment;
+    this.maxScale = state.maxScale ?? Infinity;
+    this.minScale = state.minScale ?? -Infinity;
   }
 
-  // Destructive action that returns the list of commands
-  // to be ran by OBS to bring this scene up to date.
   getCommands(): ObsCommand[] {
     return this.commands.splice(0, this.commands.length);
   }
@@ -91,19 +88,13 @@ class SceneItem {
       positionY: this.defaultY(),
       scaleX: this.defaultScaleX(),
       scaleY: this.defaultScaleY()
-    }
+    };
   }
 
   toJSON(): any {
-    return { ...this, scene: this.scene.name }
+    return { ...this, scene: this.scene.name };
   }
 
-  // Sets what the item looks like when untouched from the controller's scene
-  // config, rather than from however it happened to be sized in OBS. The
-  // item is centre-aligned, with `position` being where its centre is, so
-  // that it grows and shrinks around its middle. Anything it was in the
-  // middle of (a shrink, say) is dropped: it starts over from the new
-  // default.
   setDefaultSize(
     size: { width: number, height: number },
     scale: { x: number, y: number },
@@ -124,7 +115,7 @@ class SceneItem {
     this.currentPosition = {
       x: this.defaultWidth() / 2,
       y: this.defaultHeight() / 2
-    }
+    };
   }
 
   reset(): void {
@@ -132,29 +123,29 @@ class SceneItem {
     this.currentPosition = this.defaultPosition;
     this.currentScale = this.defaultScale;
     this.currentSize = this.defaultSize;
-    this.alignment = this.defaultAlignment
+    this.alignment = this.defaultAlignment;
   }
 
   scale(scaleX: number, scaleY?: number): void {
-    scaleY = scaleY ?? scaleX
-    scaleX = clamp(scaleX, this.minScale, this.maxScale)
-    scaleY = clamp(scaleY, this.minScale, this.maxScale)
+    scaleY = scaleY ?? scaleX;
+    scaleX = clamp(scaleX, this.minScale, this.maxScale);
+    scaleY = clamp(scaleY, this.minScale, this.maxScale);
 
     this.currentScale = {
       x: scaleX,
       y: scaleY
-    }
+    };
 
     this.currentSize = {
       height: this.defaultHeight() * this.scaleX(),
       width: this.defaultWidth() * this.scaleY(),
-    }
+    };
   }
 
   adjustSize(magnitude: number): void {
     let newScale = this.scaleX() * magnitude;
 
-    this.scale(newScale)
+    this.scale(newScale);
   }
 
   rotate(angle: number): void {
@@ -162,27 +153,27 @@ class SceneItem {
   }
 
   height(): number {
-    return this.currentSize["height"]
+    return this.currentSize["height"];
   }
 
   width(): number {
-    return this.currentSize["width"]
+    return this.currentSize["width"];
   }
 
   defaultHeight(): number {
-    return this.defaultSize["height"]
+    return this.defaultSize["height"];
   }
 
   defaultWidth(): number {
-    return this.defaultSize["width"]
+    return this.defaultSize["width"];
   }
 
   defaultX(): number {
-    return this.defaultPosition["x"]
+    return this.defaultPosition["x"];
   }
 
   defaultY(): number {
-    return this.defaultPosition["y"]
+    return this.defaultPosition["y"];
   }
 
   defaultScaleX(): number {
@@ -203,4 +194,4 @@ class SceneItem {
 
 }
 
-export { Alignment, ObsCommand, SceneItem, SceneItemProps }
+export { Alignment, ObsCommand, SceneItem, SceneItemProps };

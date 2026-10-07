@@ -1,15 +1,7 @@
 import { deleteSecret, getSecret, hasSecret, setSecret } from "./secrets.js";
 
-// Glue between the fields a controller or listener kind declares (its
-// class's static `fields`) and where their values are kept: plain fields in
-// the row's `options`, `secret` fields encrypted in the secrets table.
-
-// What a secret belongs to - with the row id and field key, this makes up
-// its key in the secrets table, e.g. "listener:2:accessToken".
 export type SecretOwner = "controller" | "listener";
 
-// A secret submitted through the API: a string replaces the stored value,
-// null removes it, and undefined/"" (a form field left blank) keeps it.
 export type SecretChanges = { [key: string]: string | null | undefined };
 
 function secretKey(owner: SecretOwner, id: number, field: string): string {
@@ -20,8 +12,6 @@ function secretFields(fields: SettingField[]): SettingField[] {
   return fields.filter((field) => field.secret);
 }
 
-// Pulls any secret field found inline in `options` out into its own map, so
-// options can be stored (and served) without them.
 export function splitSecrets(fields: SettingField[], options: any): { options: any, secrets: SecretChanges } {
   const secrets: SecretChanges = {};
 
@@ -66,21 +56,16 @@ export function loadSecrets(owner: SecretOwner, id: number, fields: SettingField
   return secrets;
 }
 
-// Which secrets are set, without their values - all a browser ever gets.
 export function secretsPresent(owner: SecretOwner, id: number, fields: SettingField[]): { [key: string]: boolean } {
   return Object.fromEntries(
     secretFields(fields).map((field) => [field.key, hasSecret(secretKey(owner, id, field.key))])
   );
 }
 
-// A WebSocket address is often copied from somewhere that shows it as a web
-// address (a tunnel prints "https://..."), which points at the same place:
-// https is wss, http is ws.
 export function toWebSocketUrl(value: string): string {
   return value.trim().replace(/^http(s?):\/\//i, "ws$1://");
 }
 
-// Tidies submitted values in place before they're validated and stored.
 export function normalizeFields(fields: SettingField[], options: any): void {
   if (!options || typeof options !== "object")
     return;
@@ -91,10 +76,6 @@ export function normalizeFields(fields: SettingField[], options: any): void {
   }
 }
 
-// Returns a message describing the first problem with the submitted values,
-// or undefined if they're fine. Only values actually present are checked
-// unless `enforceRequired` is set (the invite page, which submits every
-// field it shows).
 export function validateFields(
   fields: SettingField[],
   options: any,
@@ -132,8 +113,6 @@ export function validateFields(
       continue;
     }
 
-    // Ids and the like may have been stored as numbers before there was a
-    // form for them.
     if (typeof value !== "string" && !(field.type === "text" && typeof value === "number"))
       return `'${field.label}' must be text.`;
 

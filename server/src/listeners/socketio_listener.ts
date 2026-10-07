@@ -36,8 +36,6 @@ class SocketIOListener extends Listener {
     ];
   }
 
-  // The options the Socket.IO client gets: whatever is configured, with the
-  // auth token (kept apart, as a secret) put back where the server expects it.
   private static clientOptions(options: any, token: string | undefined): any {
     return token ? { ...options, auth: { ...options?.auth, token } } : options;
   }
@@ -49,8 +47,6 @@ class SocketIOListener extends Listener {
       return Promise.resolve({ ok: false, message: "No server address is set." });
 
     return new Promise((resolve) => {
-      // forceNew keeps this from sharing (and then tearing down) the
-      // connection manager the running listener uses for the same address.
       const socket = io(address, {
         ...SocketIOListener.clientOptions(options, config.secrets?.token),
         forceNew: true,
@@ -101,7 +97,6 @@ class SocketIOListener extends Listener {
     if (this._socket?.connected)
       return { state: "connected" };
 
-    // socket.io-client keeps retrying on its own while `active` is true.
     return { state: this._socket?.active ? "connecting" : "disconnected" };
   }
 

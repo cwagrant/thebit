@@ -51,27 +51,12 @@
     <SettingsForm
       v-model:name="name"
       v-model:kind="kind"
+      v-model:active="active"
       v-model:options="options"
       v-model:secrets="secrets"
       :kinds="controllerKinds ?? []"
       :fields-by-kind="controllerFields ?? {}"
-    >
-      <div class="field">
-        <label
-          class="label mt-2"
-          for="active"
-        >Active</label>
-        <div class="control">
-          <input
-            id="active"
-            v-model="active"
-            type="checkbox"
-            :true-value="1"
-            :false-value="0"
-          >
-        </div>
-      </div>
-    </SettingsForm>
+    />
 
     <p
       v-if="error"

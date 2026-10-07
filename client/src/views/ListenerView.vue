@@ -1,8 +1,10 @@
 <script setup lang="ts">
   import { ref, inject, computed, watch, onMounted, type Ref } from "vue";
   import { useRoute } from 'vue-router';
+  import api, { errorMessage } from '@/api';
   import { listenerFieldsKey, type SecretChanges, type ToolResult } from '@/settings';
   import SettingsForm from '@/components/SettingsForm.vue';
+  import FormFooter from '@/components/FormFooter.vue';
   import ListenerRules from '@/components/ListenerRules.vue';
 
   type Listener = {
@@ -11,10 +13,7 @@
     active: number;
     kind: string;
     options: Record<string, unknown>;
-    // Which secret fields have a saved value - the values themselves never
-    // come back from the server.
     secrets: Record<string, boolean>;
-    // Whether this kind of listener connects to anything that can be tested.
     testable?: boolean;
   }
 
@@ -43,16 +42,10 @@
     error.value = "";
     saved.value = false;
 
-    const response = await fetch(`/api/listeners/${id}`, {
-      method: "PUT",
-      headers: {
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({ name, kind, options, secrets: secretChanges.value, active })
-    });
-
-    if (!response.ok) {
-      error.value = await response.text() || "Failed to update listener.";
+    try {
+      await api.put(`/listeners/${id}`, { name, kind, options, secrets: secretChanges.value, active });
+    } catch (err) {
+      error.value = errorMessage(err, "Failed to update listener.");
       return;
     }
 
@@ -60,17 +53,16 @@
     await fetchListener();
   }
 
-  // Runs against what's saved, not what's sitting unsaved in the form.
   const testConnection = async () => {
     testing.value = true;
     testResult.value = undefined;
 
     try {
-      const response = await fetch(`/api/listeners/${listener.value.id}/test`, { method: "POST" });
+      const { data } = await api.post<ToolResult>(`/listeners/${listener.value.id}/test`);
 
-      testResult.value = response.ok
-        ? await response.json()
-        : { ok: false, message: await response.text() || "The test couldn't be run." };
+      testResult.value = data;
+    } catch (err) {
+      testResult.value = { ok: false, message: errorMessage(err, "The test couldn't be run.") };
     } finally {
       testing.value = false;
     }
@@ -94,15 +86,13 @@
     if(!id)
       return
 
-    const response = await fetch(`/api/listeners/${id}`);
+    try {
+      const { data } = await api.get(`/listeners/${id}`);
 
-    if (!response.ok)
-      return;
-
-    const data = await response.json();
-
-    listener.value = { ...data, options: data.options ?? {} };
-    secretChanges.value = {};
+      listener.value = { ...data, options: data.options ?? {} };
+      secretChanges.value = {};
+    } catch {
+    }
   }
 
   onMounted(() => {
@@ -128,44 +118,18 @@
     <SettingsForm
       v-model:name="listener.name"
       v-model:kind="listener.kind"
+      v-model:active="listener.active"
       v-model:options="listener.options"
       v-model:secrets="secretChanges"
       :kinds="listenerKinds ?? []"
       :fields-by-kind="listenerFields ?? {}"
       :secrets-set="listener.secrets"
-    >
-      <div class="field">
-        <label class="label mt-2">Active</label>
-        <div class="control">
-          <input
-            v-model="listener.active"
-            type="checkbox"
-            :true-value="1"
-            :false-value="0"
-          >
-        </div>
-      </div>
-    </SettingsForm>
+    />
 
-    <p
-      v-if="error"
-      class="help is-danger"
+    <FormFooter
+      :error="error"
+      :saved="saved"
     >
-      {{ error }}
-    </p>
-    <p
-      v-else-if="saved"
-      class="help is-success"
-    >
-      Saved.
-    </p>
-    <div class="buttons mt-2 mb-0">
-      <button
-        type="submit"
-        class="button is-primary"
-      >
-        Save
-      </button>
       <button
         v-if="listener.testable"
         type="button"
@@ -175,7 +139,7 @@
       >
         Test Connection
       </button>
-    </div>
+    </FormFooter>
     <p
       v-if="testResult"
       class="help"

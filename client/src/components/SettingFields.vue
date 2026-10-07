@@ -4,12 +4,10 @@
   import type { SettingField, SecretChanges } from '@/settings';
   import SceneListField from '@/components/SceneListField.vue';
 
-  // The inputs for a controller or listener kind's declared fields. Plain values are
-  // edited in place on `options`; secret fields only ever collect a new
-  // value (or a request to remove the saved one) into `secrets`.
   const props = defineProps<{
     fields: SettingField[];
     secretsSet?: Record<string, boolean>;
+    allowIncomplete?: boolean;
   }>();
 
   const options = defineModel<Record<string, unknown>>("options", { required: true });
@@ -19,9 +17,6 @@
 
   const inputValue = (event: Event) => (event.target as HTMLInputElement).value;
 
-  // A WebSocket address pasted in its web form (a tunnel prints
-  // "https://...") points at the same place: https is wss, http is ws. The
-  // server makes the same swap on save; doing it here shows it happening.
   const fieldValue = (field: SettingField, event: Event) => {
     const input = event.target as HTMLInputElement;
 
@@ -105,7 +100,7 @@
           :value="secrets[field.key] ?? ''"
           :placeholder="secretPlaceholder(field)"
           :disabled="secrets[field.key] === null"
-          :required="field.required && !secretsSet?.[field.key]"
+          :required="field.required && !allowIncomplete && !secretsSet?.[field.key]"
           @input="setSecret(field.key, inputValue($event))"
         >
       </div>
@@ -143,7 +138,7 @@
         type="text"
         :value="options[field.key] ?? ''"
         :placeholder="field.placeholder"
-        :required="field.required"
+        :required="field.required && !allowIncomplete"
         @input="options[field.key] = fieldValue(field, $event)"
       >
     </div>

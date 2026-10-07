@@ -64,8 +64,6 @@ export default class ATEMController extends Controller {
     return actions;
   }
 
-  // Listener actions carry their path as a dotted string ("me0.upstreamKey0");
-  // accept that as well as an already-split path.
   action(action: string, path: string | string[], props: any): void {
     const segments = Array.isArray(path) ? [...path] : path.split('.');
     const me = segments.shift();

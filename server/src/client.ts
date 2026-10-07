@@ -1,18 +1,5 @@
 import WebSocket from "ws";
 
-// Basic reinterpretation of Socket.IO functions
-// Sadly my way of doing this is rather rigid as I expect
-// someone to send a JSON message with an "event" field in
-// the data. Need to consider a more flexible implementation
-// in the future for WSListeners to be able to receive the
-// message and parse it themselves.
-//
-// That would break my "on" method in terms of doing things
-// like Socket.IO with events like ws.on("donation:show")
-// Instead the handlers would behave the same way they do
-// for the connection events and any message handlers would
-// need to have a way to identify messages they want to ignore
-// when listening for multiple messages.
 export default class Client {
   url: string;
   ws: WebSocket;
@@ -30,9 +17,6 @@ export default class Client {
     this.bindWebSocketEvents();
   }
 
-  // Marks this closure as intentional so the reconnect loop in
-  // bindConnectionEvents doesn't treat it as a dropped connection to
-  // recover from.
   close(): void {
     this._closed = true;
 

@@ -3,13 +3,6 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import * as path from "node:path";
 import db from "./db.js";
 
-// Encrypted key/value storage for anything that shouldn't sit in plaintext
-// in the database (passwords, tokens, ...). Rows live in the `secrets` table
-// as (id, key, value), where `value` is "v1:<iv>:<tag>:<ciphertext>" - each
-// part base64, encrypted with AES-256-GCM under the master key below. The
-// row's key is bound in as additional authenticated data, so a ciphertext
-// copied onto another row fails to decrypt rather than leaking across keys.
-
 const KEY_FILE = path.join(process.cwd(), "thebit.key");
 const FORMAT_VERSION = "v1";
 
@@ -27,9 +20,6 @@ function parseKey(raw: string, source: string): Buffer {
   return key;
 }
 
-// THEBIT_SECRET_KEY wins if set; otherwise a key is generated once into
-// thebit.key next to the database. Losing the key means losing every stored
-// secret - there is deliberately no fallback.
 function masterKey(): Buffer {
   if (cachedMasterKey)
     return cachedMasterKey;
@@ -47,8 +37,6 @@ function masterKey(): Buffer {
   return cachedMasterKey;
 }
 
-// Separate keys for other purposes (e.g. signing session cookies), derived
-// from the master key so there's still only one thing to back up.
 export function deriveKey(purpose: string, salt: string = ""): Buffer {
   return Buffer.from(crypto.hkdfSync("sha256", masterKey(), salt, purpose, 32));
 }
@@ -89,9 +77,6 @@ export function setSecret(key: string, value: string): void {
   `).run(key, encrypt(key, value));
 }
 
-// Returns undefined both when the secret doesn't exist and when it can't be
-// decrypted (wrong/rotated master key) - the latter is logged, since from
-// the caller's side both just mean "no usable value".
 export function getSecret(key: string): string | undefined {
   const row = db.prepare("SELECT value FROM secrets WHERE key = ?").get(key) as { value: string } | undefined;
 

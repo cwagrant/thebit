@@ -1,19 +1,11 @@
 import WebSocket from "ws";
 
-// Shared plumbing for listeners' "test connection" checks (see
-// Listener.testConnection): a throwaway WebSocket, separate from whatever
-// the running listener has open, that lives just long enough to find out
-// whether connecting works.
-
 const TEST_TIMEOUT_MS = 10 * 1000;
 
 type Finish = (result: ToolResult) => void;
 
 interface ProbeHandlers {
-  // The socket opened. Call `finish` here if being open is all the test
-  // needs to see.
   onOpen?: (socket: WebSocket, finish: Finish) => void;
-  // Called for every message, parsed as JSON where it is JSON.
   onMessage?: (message: any, socket: WebSocket, finish: Finish) => void;
 }
 
@@ -28,8 +20,6 @@ export function probeWebSocket(url: string, handlers: ProbeHandlers): Promise<To
 
       finished = true;
       clearTimeout(timer);
-      // Keep a listener for the "error" ws emits when a socket is torn down
-      // mid-handshake - unheard, it would take the process down.
       socket?.removeAllListeners();
       socket?.on("error", () => { });
       socket?.terminate();

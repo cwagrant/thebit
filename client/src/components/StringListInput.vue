@@ -1,6 +1,4 @@
 <script setup lang="ts">
-  // A list of text values: one input per value with a delete button beside
-  // it, and a + button to add another.
   defineProps<{
     label: string;
     placeholder?: string;

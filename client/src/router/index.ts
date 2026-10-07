@@ -17,7 +17,8 @@ const router = createRouter({
     {
       path: '/listeners/new',
       name: 'ListenerNew',
-      component: () => import('../views/NewListenerView.vue'),
+      component: () => import('../views/NewSettingsView.vue'),
+      props: { resource: 'listeners' },
     },
     {
       path: '/listeners/:id',
@@ -27,7 +28,8 @@ const router = createRouter({
     {
       path: '/controllers/new',
       name: 'ControllerNew',
-      component: () => import('../views/NewControllerView.vue'),
+      component: () => import('../views/NewSettingsView.vue'),
+      props: { resource: 'controllers' },
     },
     {
       path: '/controllers/:id',
@@ -35,8 +37,6 @@ const router = createRouter({
       component: () => import('../views/ControllerSettingsView.vue'),
     },
     {
-      // Reached through a controller's invite link, with the invite token in
-      // the URL fragment. `public` routes skip the admin login in App.vue.
       path: '/connect',
       name: 'ConnectView',
       component: () => import('../views/ConnectView.vue'),

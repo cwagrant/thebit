@@ -1,4 +1,4 @@
-import { ObsCommand, SceneItem } from "./scene_item.js"
+import { ObsCommand, SceneItem } from "./scene_item.js";
 
 interface Item {
   name: string,
@@ -24,7 +24,7 @@ class Scene {
   }
 
   loadState(state: any) {
-    this.sceneItem.loadState(state.sceneItem)
+    this.sceneItem.loadState(state.sceneItem);
   }
 
   setSceneItem(sceneItem: SceneItem): SceneItem {
@@ -46,7 +46,7 @@ class Scene {
   }
 
   addFilter(props: Item): void {
-    this.filters.set(props.name, props)
+    this.filters.set(props.name, props);
   }
 
   getFilter(filterName: string): Item | null {
@@ -68,7 +68,7 @@ class Scene {
         sceneName: this.name,
         sceneItemTransform: this.sceneItem.getTransform()
       }
-    })
+    });
 
     this.sources.values().forEach((source: Item) => {
       source.enabled = false;
@@ -80,8 +80,8 @@ class Scene {
           sceneItemId: source.id,
           sceneItemEnabled: source.enabled
         }
-      })
-    })
+      });
+    });
 
     this.filters.values().forEach((filter: Item) => {
       this.commands.push({
@@ -91,8 +91,8 @@ class Scene {
           filterName: filter.name,
           filterEnabled: filter.enabled
         }
-      })
-    })
+      });
+    });
   }
 
   toggleSource({ sourceName }: { sourceName: string }): void {
@@ -107,14 +107,14 @@ class Scene {
           sceneItemId: source.id,
           sceneItemEnabled: source.enabled
         }
-      })
+      });
     }
   }
 
   toggleFilter({ filterName }: { filterName: string }): void {
-    const filter = this.getFilter(filterName)
+    const filter = this.getFilter(filterName);
     if (filter) {
-      filter.enabled = !filter.enabled
+      filter.enabled = !filter.enabled;
 
       this.commands.push({
         command: "SetSourceFilterEnabled",
@@ -123,7 +123,7 @@ class Scene {
           filterName: filter.name,
           filterEnabled: filter.enabled
         }
-      })
+      });
     }
   }
 
@@ -139,7 +139,7 @@ class Scene {
           scale: this.sceneItem.currentScale,
         }
       }
-    })
+    });
 
     this.commands.push({
       command: "SetSourceFilterEnabled",
@@ -148,11 +148,11 @@ class Scene {
         filterName: this.transitionFilterName,
         filterEnabled: true
       }
-    })
+    });
   }
 
   scale({ scale }: { scale: number }): void {
-    this.sceneItem.scale(+scale)
+    this.sceneItem.scale(+scale);
     this.transition();
   }
 
@@ -167,16 +167,16 @@ class Scene {
   }
 
   grow({ magnitude }: { magnitude: number }): void {
-    this.sceneItem.adjustSize(1 + (+magnitude))
+    this.sceneItem.adjustSize(1 + (+magnitude));
     this.transition();
   }
 
   setMaxScale({ maxScale }: { maxScale: number }): void {
-    this.sceneItem.maxScale = +maxScale
+    this.sceneItem.maxScale = +maxScale;
   }
 
   setMinScale({ minScale }: { minScale: number }): void {
-    this.sceneItem.minScale = +minScale
+    this.sceneItem.minScale = +minScale;
   }
 
   getActions(): Action[] {
@@ -204,8 +204,8 @@ class Scene {
       { action: "rotate", options: { angle: [-30, -45, -90, -180] } },
       { action: "setMinScale", props: { minScale: "number" } },
       { action: "setMaxScale", props: { maxScale: "number" } },
-    ]
+    ];
   }
 }
 
-export { Scene }
+export { Scene };

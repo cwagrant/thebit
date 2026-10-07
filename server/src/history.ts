@@ -15,8 +15,6 @@ export default class History {
   get listener_id(): number { return this._listener_id; }
   get key(): string { return this._key; }
 
-  // Returns true if this (listener_id, key) pair was already recorded - i.e.
-  // this is a duplicate - and false if it's new.
   static async create(listener_id: number, key: string): Promise<boolean> {
     const result = db.prepare(`
       INSERT INTO listener_history (listener_id, key)

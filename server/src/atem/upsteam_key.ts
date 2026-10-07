@@ -1,6 +1,6 @@
 import { Atem } from 'atem-connection';
 import { FlyKeyKeyFrame } from 'atem-connection/dist/enums/index.js';
-import { clamp } from "../utils.js"
+import { clamp } from "../utils.js";
 
 class UpstreamKey {
   atem: Atem;
@@ -16,7 +16,7 @@ class UpstreamKey {
   }
 
   scale({ scale }: { scale: number }): void {
-    scale = clamp(scale, this.minScale, this.maxScale)
+    scale = clamp(scale, this.minScale, this.maxScale);
 
     this._scaleTo({ x: scale * 1000, y: scale * 1000 });
   }
@@ -52,7 +52,7 @@ class UpstreamKey {
   }
 
   animationDuration({ duration }: { duration: number }): void {
-    let rate = 30 * duration / 1000
+    let rate = 30 * duration / 1000;
     if (rate > 0) {
       this.atem.setUpstreamKeyerDVESettings({
         rate
@@ -73,7 +73,7 @@ class UpstreamKey {
     this.atem.setUpstreamKeyerDVESettings({
       sizeX: size.x,
       sizeY: size.y
-    }, this.meIndex, this.keyerIndex)
+    }, this.meIndex, this.keyerIndex);
   }
 
   getActions(): Actions {
@@ -86,7 +86,7 @@ class UpstreamKey {
       { action: "animationDuration", props: { duration: "number" } },
       { action: "setMinScale", props: { minScale: "number" } },
       { action: "setMaxScale", props: { maxScale: "number" } },
-    ]
+    ];
   }
 
   action(action: string, path: string[], props: any): void {
@@ -95,7 +95,7 @@ class UpstreamKey {
     const actionFunc: any = (this as any)[action];
 
     if (typeof actionFunc === "function") {
-      console.log(`responds to ${action}`, props)
+      console.log(`responds to ${action}`, props);
       actionFunc.apply(this, [props]);
     }
   }
