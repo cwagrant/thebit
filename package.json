@@ -14,13 +14,18 @@
     "start-server": "node wsserver.js",
     "dev": "concurrently \"npm run dev -w server\" \"npm run dev -w client\"",
     "build": "npm run build --workspaces",
-    "start": "node dist/index.js",
+    "start": "npm run start -w server",
     "test": "scripts/test.sh"
   },
   "author": "",
   "license": "ISC",
   "devDependencies": {
+    "@stylistic/eslint-plugin": "^5.6.1",
+    "@vue/eslint-config-typescript": "^14.6.0",
     "concurrently": "^9.2.1",
-    "tsx": "^4.21.0"
+    "eslint": "^9.39.2",
+    "eslint-plugin-vue": "^10.6.2",
+    "tsx": "^4.21.0",
+    "typescript-eslint": "^8.51.0"
   }
 }

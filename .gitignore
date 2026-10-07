@@ -7,3 +7,8 @@ config.json
 *.zip
 listeners.yaml
 config.yaml
+*.sqlite*
+thebit.key
+deploy/data/
+deploy/traefik/data/
+deploy/minish.tar.gz

@@ -1,0 +1,56 @@
+# Traefik in front of thebit and its tunnel server (../docker-compose.yml),
+# serving thebit at https://minish.dev and tunnels at
+# https://*.tunnel.minish.dev.
+#
+# Certificates come from Let's Encrypt through a Cloudflare DNS challenge
+# (minish.dev's DNS is on Cloudflare) - the only kind that can issue the
+# wildcard certificate the tunnels need.
+#
+# Before starting it:
+#   1. In Cloudflare, add A records pointing at this server for minish.dev,
+#      tunnel.minish.dev and *.tunnel.minish.dev, all set to "DNS only" (grey
+#      cloud): the ssh port invitees connect to can't go through
+#      Cloudflare's proxy.
+#   2. Create a Cloudflare API token with Zone > DNS > Edit and
+#      Zone > Zone > Read on minish.dev.
+#   3. Copy .env.example to .env and fill it in.
+#
+# Start this first (docker compose up -d), then ../docker-compose.yml - this
+# one creates the "traefik" network the other joins.
+
+services:
+  traefik:
+    image: traefik:v3
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    networks:
+      - traefik
+    environment:
+      - CF_DNS_API_TOKEN=${CF_DNS_API_TOKEN:?Set CF_DNS_API_TOKEN in .env}
+    volumes:
+      # Read-only: how Traefik discovers containers and their labels.
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      # Issued certificates and the ACME account key. Keep this private.
+      - ./data/letsencrypt:/letsencrypt
+    command:
+      - --providers.docker=true
+      # Only containers labelled traefik.enable=true get routed.
+      - --providers.docker.exposedbydefault=false
+      - --providers.docker.network=traefik
+      # Plain http only exists to redirect to https.
+      - --entrypoints.web.address=:80
+      - --entrypoints.web.http.redirections.entrypoint.to=websecure
+      - --entrypoints.web.http.redirections.entrypoint.scheme=https
+      - --entrypoints.websecure.address=:443
+      # The names "websecure" and "letsencrypt" are what ../.env refers to
+      # as TRAEFIK_ENTRYPOINT and TRAEFIK_CERTRESOLVER.
+      - --certificatesresolvers.letsencrypt.acme.email=${ACME_EMAIL:?Set ACME_EMAIL in .env}
+      - --certificatesresolvers.letsencrypt.acme.storage=/letsencrypt/acme.json
+      - --certificatesresolvers.letsencrypt.acme.dnschallenge=true
+      - --certificatesresolvers.letsencrypt.acme.dnschallenge.provider=cloudflare
+
+networks:
+  traefik:
+    name: traefik

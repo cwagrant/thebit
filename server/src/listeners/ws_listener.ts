@@ -1,79 +1,85 @@
+import WebSocket from "ws";
 import Client from "../client.js";
-import { Listener } from "./base.js";
-import ObsController from "../controllers/obs_controller.js";
-import ATEMController from "../controllers/atem_controller.js";
+import { Listener } from "./listener.js";
+import type Matrix from "../matrix.js";
+import { probeWebSocket } from "./connection_test.js";
 
 class WSListener extends Listener {
-  private _socket;
+  private _socket!: Client;
+  private static kind = "ws";
 
-  constructor(config: any) {
-    super(config);
+  constructor(matrix: Matrix, config: any) {
+    super(matrix, config);
 
-    this._socket = new Client(config.address)
+    this.socket = new Client(config.address);
   }
+
+  static get fields(): SettingField[] {
+    return [
+      {
+        key: "address",
+        label: "WebSocket URL",
+        type: "ws-url",
+        required: true,
+        placeholder: "ws://localhost:8080"
+      }
+    ];
+  }
+
+  static testConnection = async (config: ListenerConfig): Promise<ToolResult> => {
+    const address = config.options.address;
+
+    if (!address)
+      return { ok: false, message: "No WebSocket URL is set." };
+
+    return probeWebSocket(String(address), {
+      onOpen: (_socket, finish) => finish({ ok: true, message: `Connected to ${address}.` })
+    });
+  };
 
   get socket() {
     return this._socket;
   }
 
-  parseRules(controller: IController): void {
+  private set socket(value: Client) {
+    this._socket = value;
+  }
+
+  start(): void {
+    if (!this.active)
+      return;
+
+    this.socket = new Client(this.options.address);
+  }
+
+  get status(): ListenerStatus {
+    if (!this.active)
+      return { state: "disabled" };
+
+    // Client reconnects on its own after a drop, so anything short of open
+    // means it's still trying.
+    return { state: this.socket.ws.readyState === WebSocket.OPEN ? "connected" : "connecting" };
+  }
+
+  stop(): void {
+    this.socket.close();
+  }
+
+  parseRules(): void {
     this.rules.forEach((rule) => {
-      this.socket.on(rule.on, (args: any) => {
-        const executionResult: ListenerAction | ListenerAction[] = this.execRule(rule, args);
-        const listenerActions = Array.isArray(executionResult) ? executionResult : [executionResult];
-        
-        listenerActions.forEach((listenerAction) => {
-          if (this.checkHistory(listenerAction.uid)) {
-            console.debug(`Duplicate event received for uid ${listenerAction.uid}, ignoring.`)
-            return;
-          }
+      this.socket.on(rule.message, (args: any) => {
+        try {
+          const executionResult: ListenerAction | ListenerAction[] = this.execRule(rule, args);
+          const listenerActions = (Array.isArray(executionResult) ? executionResult : [executionResult]).filter(Boolean);
 
-          console.debug('listenerAction', listenerAction, args)
-
-          if (controller instanceof ObsController) {
-            try {
-              let { action, path, ...props } = listenerAction
-
-              if (!action) {
-                return;
-              }
-
-              if (!path) {
-                controller.scenes.forEach((scene) => {
-                  controller.action(action, scene.name, props);
-                })
-              } else {
-                controller.action(action, path, props);
-              }
-            }
-            catch (err: any) {
-              console.error("Error executing listener action:", err)
-            }
-          } else if (controller instanceof ATEMController) {
-            try {
-              let { action, path, ...args } = listenerAction
-
-              if (!action) {
-                return
-              }
-
-              if (typeof path !== "string") {
-                throw new Error("ATEM Listener action requires a valid 'path' string.")
-              }
-
-              if (typeof action !== "string") {
-                throw new Error("ATEM Listener action requires a valid 'action' string.")
-              }
-
-              controller.action(action, path.split("."), args);
-            } catch (err: any) {
-              console.error("Error executing listener action:", err)
-            }
-          }
-        });
-      })
-    })
+          this.callActions(listenerActions);
+        } catch (err: any) {
+          console.error('Error executing rule', rule.id, err);
+        }
+      });
+    });
   }
 }
 
-export { WSListener }
+export default WSListener;
+export { WSListener };

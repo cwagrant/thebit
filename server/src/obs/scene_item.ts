@@ -13,7 +13,7 @@ type SceneItemProps = {
   defaultAlignment: Alignment;
   maxScale?: number;
   minScale?: number;
-}
+};
 
 // This is based on OBS's alignments.
 enum Alignment {
@@ -96,6 +96,27 @@ class SceneItem {
 
   toJSON(): any {
     return { ...this, scene: this.scene.name }
+  }
+
+  // Sets what the item looks like when untouched from the controller's scene
+  // config, rather than from however it happened to be sized in OBS. The
+  // item is centre-aligned, with `position` being where its centre is, so
+  // that it grows and shrinks around its middle. Anything it was in the
+  // middle of (a shrink, say) is dropped: it starts over from the new
+  // default.
+  setDefaultSize(
+    size: { width: number, height: number },
+    scale: { x: number, y: number },
+    position: { x: number, y: number }
+  ): void {
+    this.defaultSize = size;
+    this.currentSize = size;
+    this.defaultScale = scale;
+    this.currentScale = scale;
+    this.defaultPosition = position;
+    this.currentPosition = position;
+    this.defaultAlignment = Alignment.Center;
+    this.alignment = Alignment.Center;
   }
 
   center(): void {

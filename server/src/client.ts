@@ -18,6 +18,8 @@ export default class Client {
   ws: WebSocket;
   events: Map<string, Array<Function>> = new Map();
   connectionAttempts: number = 1;
+  private _closed: boolean = false;
+  private _reconnectTimer?: NodeJS.Timeout;
 
   constructor(url: string) {
     console.debug('Client connecting to WebSocket at:', url);
@@ -26,6 +28,20 @@ export default class Client {
 
     this.bindConnectionEvents();
     this.bindWebSocketEvents();
+  }
+
+  // Marks this closure as intentional so the reconnect loop in
+  // bindConnectionEvents doesn't treat it as a dropped connection to
+  // recover from.
+  close(): void {
+    this._closed = true;
+
+    if (this._reconnectTimer) {
+      clearTimeout(this._reconnectTimer);
+      this._reconnectTimer = undefined;
+    }
+
+    this.ws.close();
   }
 
   on(eventName: string, callback: Function): void {
@@ -37,7 +53,7 @@ export default class Client {
     this.events.set(eventName, this.events.get(eventName) || []);
     this.events.get(eventName)?.filter((cb) => {
       return cb !== callback;
-    })
+    });
   }
 
   emit(eventName: string, data: JSON): boolean {
@@ -45,11 +61,11 @@ export default class Client {
       this.ws.send(JSON.stringify({
         event: eventName,
         data: data
-      }))
+      }));
       return true;
     } catch (error) {
-      console.error('Client Failure: Failed to send message.')
-      console.error(`Event: ${eventName}, Data: ${data}`)
+      console.error('Client Failure: Failed to send message.');
+      console.error(`Event: ${eventName}, Data: ${data}`);
       console.debug(error);
       return false;
     }
@@ -65,14 +81,14 @@ export default class Client {
             : socket_event;
 
           if (this.events.has(received_event)) {
-            const handlers = this.events.get(received_event) || []
+            const handlers = this.events.get(received_event) || [];
 
             for (const handler of handlers) {
               handler(data);
             }
           }
         } catch (err) {
-          console.error("Error handling Websocket Event:", err)
+          console.error("Error handling Websocket Event:", err);
         }
       });
     }
@@ -80,16 +96,26 @@ export default class Client {
 
   bindConnectionEvents(): void {
     this.on("close", () => {
-      const intervalTime = this.connectionAttempts * 1000
-      const reconnectWait = intervalTime > 10000 ? 10000 : intervalTime
-
-      if (this.connectionAttempts === 1) {
-        console.debug('Client Connection Closed')
+      if (this._closed) {
+        return;
       }
 
-      setTimeout(() => {
+      const intervalTime = this.connectionAttempts * 1000;
+      const reconnectWait = intervalTime > 10000 ? 10000 : intervalTime;
+
+      if (this.connectionAttempts === 1) {
+        console.debug('Client Connection Closed');
+      }
+
+      this._reconnectTimer = setTimeout(() => {
+        this._reconnectTimer = undefined;
+
+        if (this._closed) {
+          return;
+        }
+
         if (this.connectionAttempts < 6) {
-          console.debug(`Client Reconnection Attempt ${this.connectionAttempts}`)
+          console.debug(`Client Reconnection Attempt ${this.connectionAttempts}`);
         }
         this.connectionAttempts = this.connectionAttempts + 1;
         this.ws = new WebSocket(this.url);
