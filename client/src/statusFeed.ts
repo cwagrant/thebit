@@ -1,10 +1,4 @@
-import { ref, watch, onMounted, onUnmounted, type Ref } from 'vue';
-
-// Live controller and listener statuses, pushed by the server over one
-// shared WebSocket (see server/src/status_feed.ts) instead of each page
-// polling for them. The socket is opened when the first component using it
-// mounts and closed when the last one unmounts; if it drops, it reconnects
-// and the server sends the whole picture again.
+import { ref, computed, watch, onMounted, onUnmounted, type ComputedRef, type Ref } from 'vue';
 
 export interface FeedStatus {
   state: string;
@@ -20,6 +14,8 @@ const feeds: Record<"controllers" | "listeners", Ref<Statuses | undefined>> = {
   controllers: ref(),
   listeners: ref()
 };
+
+const controllerStates = ref<Record<string, unknown>>({});
 
 let socket: WebSocket | undefined;
 let users = 0;
@@ -43,6 +39,7 @@ const connect = () => {
       if (message.type === "statuses") {
         feeds.controllers.value = message.controllers;
         feeds.listeners.value = message.listeners;
+        controllerStates.value = message.states ?? {};
       }
     } catch {
     }
@@ -83,10 +80,6 @@ const release = () => {
   current?.close();
 };
 
-// Keeps `status` on each of a page's items up to date from the feed. If the
-// feed's set of ids stops matching the page's (something was added or
-// removed elsewhere), `refetch` is called to bring the list itself up to
-// date.
 export function useLiveStatuses<Item extends { id: number, status?: FeedStatus | null }>(
   kind: "controllers" | "listeners",
   items: Ref<Item[]>,
@@ -112,11 +105,16 @@ export function useLiveStatuses<Item extends { id: number, status?: FeedStatus |
       refetch();
   };
 
-  // On a new picture from the server, and on the page's own list being
-  // (re)loaded - whichever arrives second still gets the statuses applied.
   watch(feeds[kind], apply);
   watch(() => items.value.map((item) => item.id).join(), apply);
 
   onMounted(acquire);
   onUnmounted(release);
+}
+
+export function useLiveControllerState<State>(id: Ref<number>): ComputedRef<State | undefined> {
+  onMounted(acquire);
+  onUnmounted(release);
+
+  return computed(() => controllerStates.value[id.value] as State | undefined);
 }

@@ -7,6 +7,7 @@
   });
 
   import { watch, ref, onMounted } from 'vue';
+  import api from '@/api';
   import ListenerRule from '@/components/ListenerRule.vue';
 
   type Rule = {
@@ -22,8 +23,7 @@
     if(!props.listener.id)
       return
 
-    const response = await fetch(`/api/listeners/${props.listener.id}/rules`)
-    const data = await response.json();
+    const { data } = await api.get<Rule[]>(`/listeners/${props.listener.id}/rules`);
 
     for (const rule of data) {
       rules.value[rule.id] = rule;
@@ -57,9 +57,6 @@
     fetchListenerRules();
   })
 
-  // The listener is still being fetched when this component is set up, so
-  // its id isn't known yet when newRule is created - without this, a new
-  // rule would be saved against listener 0 and never run.
   watch(() => props.listener.id, (id) => {
     newRule.value.listener_id = id;
   }, { immediate: true })

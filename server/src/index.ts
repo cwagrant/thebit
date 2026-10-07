@@ -13,29 +13,16 @@ import { attachStatusFeed } from "./status_feed.js";
 import { createInvite, findInviteByToken, findInviteForController, revokeInvite, type Invite } from "./invites.js";
 
 const app = express();
-// .env has already been loaded by this point - db.ts calls loadEnvFile() and
-// is pulled in through the matrix/knex imports above, which run first.
 const PORT = Number(process.env.PORT) || 3131;
 
-// Must exactly match a Redirect URL registered on the Twitch application
-// being used, and must be reachable from whichever browser completes the
-// authorization (localhost only works when that's the same machine running
-// this server - a remote friend authorizing needs this server reachable
-// from their network, e.g. via a tunnel).
 const TWITCH_OAUTH_REDIRECT_URI = process.env.TWITCH_OAUTH_REDIRECT_URI || `http://localhost:${PORT}/oauth/twitch/callback`;
 const TWITCH_AUTHORIZATION_TTL_MS = 10 * 60 * 1000;
 
-// Tracks in-flight /oauth/twitch/authorize -> /oauth/twitch/callback round
-// trips (keyed by the OAuth `state` param) so the callback knows which
-// listener a given authorization was for. Deliberately in-memory only: this
-// is a short-lived, single-use handshake, not data worth persisting.
 const pendingTwitchAuthorizations = new Map<string, { listenerId: number, createdAt: number }>();
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Request bodies are logged, so anything that looks like a credential is
-// blanked out first - whole objects under a matching key included.
 const SENSITIVE_KEY = /pass|secret|token|authorization/i;
 
 function redact(value: any): any {
@@ -61,9 +48,6 @@ app.use(morgan(':body'));
 const matrix = new Matrix();
 await matrix.start();
 
-// Columns like `options`/`condition` are stored as JSON text; accept them
-// either as an object (native API callers) or an already-stringified value
-// (e.g. a JSON editor field).
 function normalizeJSON(value: unknown): string | null {
   if (value === undefined || value === null || value === '')
     return null;
@@ -71,14 +55,10 @@ function normalizeJSON(value: unknown): string | null {
   return typeof value === "string" ? value : JSON.stringify(value);
 }
 
-// better-sqlite3 can only bind numbers, strings, bigints, buffers, and null -
-// an omitted (undefined) field passed straight through to knex throws.
 function nullIfUndefined<T>(value: T | undefined): T | null {
   return value === undefined ? null : value;
 }
 
-// A controller's `options` as submitted - an object, or JSON text from an
-// editor field. Throws on text that isn't valid JSON.
 function parseOptions(value: unknown): any {
   if (value === undefined || value === null || value === '')
     return null;
@@ -103,9 +83,6 @@ app.delete("/api/session", (req: Request, res: Response) => {
   res.sendStatus(204);
 });
 
-// The invite page's endpoints. The token travels in the Authorization
-// header (the page reads it from its URL fragment) rather than in the URL,
-// so it stays out of this server's access log and any proxy's along the way.
 async function inviteContext(req: Request) {
   const [scheme, token] = (req.headers.authorization || "").split(" ");
   const invite = scheme === "Bearer" && token ? findInviteByToken(token) : undefined;
@@ -170,8 +147,6 @@ app.put("/api/invite", async (req: Request, res: Response, next: NextFunction) =
     const options = { ...context.options };
     const secrets: SecretChanges = {};
 
-    // Only the fields this kind marks `invite` are taken from the request -
-    // everything else about the controller stays as its owner set it.
     for (const field of inviteFields) {
       if (field.secret)
         secrets[field.key] = submittedSecrets[field.key];
@@ -204,15 +179,10 @@ app.put("/api/invite", async (req: Request, res: Response, next: NextFunction) =
   }
 });
 
-// Called by the sish tunnel server (--authentication-password-request-url)
-// with {user, password, remote_addr} for every ssh login - a 200 lets the
-// client in, anything else turns it away. See tunnel.ts.
 app.post("/api/tunnel/auth", (req: Request, res: Response) => {
   res.sendStatus(tunnelLoginAllowed(req.body?.user, req.body?.password) ? 200 : 401);
 });
 
-// Everything under /api registered below this line needs an admin session
-// (when THEBIT_ADMIN_PASSWORD is set - see auth.ts).
 app.use("/api", requireAdmin);
 
 function controllerStatus(row: { id: number, active: number }): ControllerStatus {
@@ -223,8 +193,6 @@ function controllerStatus(row: { id: number, active: number }): ControllerStatus
     || { state: "stopped", error: matrix.controllerErrors.get(row.id) };
 }
 
-// Listed from the database rather than from the running controllers, so
-// disabled ones (which aren't loaded) still show up.
 app.get("/api/controllers", async (_: Request, res: Response, next: NextFunction) => {
   try {
     const rows = await knex("controllers").select("*");
@@ -246,8 +214,6 @@ app.get("/api/controllers/available", (_: Request, res: Response) => {
   res.json(available);
 });
 
-// The settings each controller kind needs, keyed by kind - what the
-// controller form is built from.
 app.get("/api/controllers/fields", (_: Request, res: Response) => {
   res.json(Object.fromEntries(
     Array.from(matrix.availableControllers.keys()).map((kind) => [kind, matrix.controllerFields(kind)])
@@ -272,7 +238,6 @@ app.get("/api/controllers/:id", async (req: Request, res: Response, next: NextFu
 
     const fields = matrix.controllerFields(row.kind);
 
-    // Secret values never leave the server - only whether each one is set.
     row.options = splitSecrets(fields, JSON.parse(row.options)).options;
     row.secrets = secretsPresent("controller", id, fields);
     row.status = controllerStatus(row);
@@ -286,10 +251,6 @@ app.get("/api/controllers/:id", async (req: Request, res: Response, next: NextFu
   }
 });
 
-// Splits a submitted controller or listener into what goes in its row and
-// what goes in the secrets table. Secrets can arrive under `secrets`, or
-// inline in `options` under a secret field's key - either way they're kept
-// out of the row. Returns a message instead if the submission is unusable.
 function settingsSubmission(fields: SettingField[], body: any): { options: any, secrets: SecretChanges, fields: SettingField[] } | string {
   let parsed: any;
 
@@ -309,6 +270,15 @@ function settingsSubmission(fields: SettingField[], body: any): { options: any, 
   return problem || { options: split.options, secrets, fields };
 }
 
+function controllerIncomplete(
+  fields: SettingField[],
+  options: any,
+  secrets: SecretChanges,
+  secretsAlreadySet: { [key: string]: boolean } = {}
+): string | undefined {
+  return validateFields(fields, options, secrets, { enforceRequired: true, secretsAlreadySet });
+}
+
 app.post("/api/controllers", async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { active, name, kind } = req.body;
@@ -317,9 +287,11 @@ app.post("/api/controllers", async (req: Request, res: Response, next: NextFunct
     if (typeof submission === "string")
       return res.status(400).send(submission);
 
+    const incomplete = controllerIncomplete(submission.fields, submission.options, submission.secrets);
+
     const inserted = await knex("controllers").insert({
       name, kind, options: normalizeJSON(submission.options),
-      active: active === undefined ? 1 : Number(Boolean(Number(active)))
+      active: incomplete ? 0 : active === undefined ? 1 : Number(Boolean(Number(active)))
     }).returning('*');
 
     if (inserted.length <= 0)
@@ -355,13 +327,17 @@ app.put("/api/controllers/:id", async (req: Request, res: Response, next: NextFu
     if (typeof submission === "string")
       return res.status(400).send(submission);
 
+    const incomplete = controllerIncomplete(
+      submission.fields, submission.options, submission.secrets,
+      secretsPresent("controller", id, submission.fields)
+    );
+
     const changedRows = await knex("controllers").where('id', '=', id)
       .update({
         name: name,
         kind: kind,
         options: normalizeJSON(submission.options),
-        // Left as it is when the request doesn't say.
-        active: active === undefined ? undefined : Number(Boolean(Number(active)))
+        active: incomplete ? 0 : active === undefined ? undefined : Number(Boolean(Number(active)))
       });
 
     if (changedRows <= 0)
@@ -381,7 +357,6 @@ app.put("/api/controllers/:id", async (req: Request, res: Response, next: NextFu
   }
 });
 
-// Just the live connection state, for pages that poll it.
 app.get("/api/controllers/:id/status", async (req: Request, res: Response, next: NextFunction) => {
   try {
     const row = await knex("controllers").where("id", "=", parseInt(req.params.id) || 0).first();
@@ -395,14 +370,28 @@ app.get("/api/controllers/:id/status", async (req: Request, res: Response, next:
   }
 });
 
-// Switches a controller on or off without touching the rest of its
-// settings. Off tears down its connection; on loads it again.
 app.put("/api/controllers/:id/active", async (req: Request, res: Response, next: NextFunction) => {
   try {
     const id = parseInt(req.params.id);
 
     if (!id || typeof req.body?.active !== "boolean")
       return res.status(400).send("'active' must be true or false.");
+
+    if (req.body.active) {
+      const row = await knex("controllers").where("id", "=", id).first();
+
+      if (!row)
+        return res.sendStatus(404);
+
+      const fields = matrix.controllerFields(row.kind);
+      const incomplete = controllerIncomplete(
+        fields, splitSecrets(fields, JSON.parse(row.options)).options, {},
+        secretsPresent("controller", id, fields)
+      );
+
+      if (incomplete)
+        return res.status(400).send(`${incomplete} Fill that in before turning this controller on.`);
+    }
 
     const changedRows = await knex("controllers").where("id", "=", id).update({ active: req.body.active ? 1 : 0 });
 
@@ -421,9 +410,6 @@ app.put("/api/controllers/:id/active", async (req: Request, res: Response, next:
   }
 });
 
-// Runs one of the tools the controller's kind declares (see
-// Controller.tools) against the live controller - i.e. with its saved
-// settings, not whatever is sitting unsaved in a form.
 app.post("/api/controllers/:id/tools/:key", async (req: Request, res: Response, next: NextFunction) => {
   try {
     const controller = liveController(parseInt(req.params.id));
@@ -440,9 +426,6 @@ app.post("/api/controllers/:id/tools/:key", async (req: Request, res: Response, 
 const DEFAULT_INVITE_DAYS = 7;
 const MAX_INVITE_DAYS = 90;
 
-// Creates the controller's invite link, replacing (and so invalidating) any
-// existing one. The token is only ever returned here - it isn't stored, so
-// a lost link means creating a new one.
 app.post("/api/controllers/:id/invite", async (req: Request, res: Response, next: NextFunction) => {
   try {
     const id = parseInt(req.params.id);
@@ -460,8 +443,6 @@ app.post("/api/controllers/:id/invite", async (req: Request, res: Response, next
     res.status(201).json({
       ...describeInvite(invite),
       token,
-      // Where this server is reachable from outside, if it differs from
-      // wherever the admin happens to be browsing it from.
       publicUrl: process.env.PUBLIC_URL || null
     });
   } catch (err) {
@@ -506,8 +487,6 @@ function listenerStatus(row: { id: number, active: number }): ListenerStatus {
   return listener.status;
 }
 
-// Tears down and recreates the listener from its DB row - the same thing
-// saving it does - for kicking a listener that's stuck or failed to start.
 app.post("/api/listeners/:id/reconnect", async (req: Request, res: Response, next: NextFunction) => {
   try {
     const id = parseInt(req.params.id);
@@ -532,8 +511,6 @@ app.post("/api/listeners/:id/reconnect", async (req: Request, res: Response, nex
   }
 });
 
-// Tries connecting with the listener's saved settings and reports how it
-// went - separate from, and without disturbing, the running listener.
 app.post("/api/listeners/:id/test", async (req: Request, res: Response, next: NextFunction) => {
   try {
     const id = parseInt(req.params.id);
@@ -553,8 +530,6 @@ app.get("/api/listeners/available", (_: Request, res: Response) => {
   res.json(available);
 });
 
-// The settings each listener kind needs, keyed by kind - what the listener
-// form is built from.
 app.get("/api/listeners/fields", (_: Request, res: Response) => {
   res.json(Object.fromEntries(
     Array.from(matrix.availableListeners.keys()).map((kind) => [kind, matrix.listenerFields(kind)])
@@ -575,7 +550,6 @@ app.get("/api/listeners/:id", async (req: Request, res: Response, next: NextFunc
 
     const fields = matrix.listenerFields(row.kind);
 
-    // Secret values never leave the server - only whether each one is set.
     row.options = splitSecrets(fields, JSON.parse(row.options)).options;
     row.secrets = secretsPresent("listener", id, fields);
     row.testable = matrix.listenerTestable(row.kind);
@@ -676,8 +650,6 @@ app.put("/api/listeners/:id", async (req: Request, res: Response, next: NextFunc
   }
 });
 
-// A rule saved against a listener that doesn't exist would sit there
-// looking fine and never run.
 async function listenerExists(id: unknown): Promise<boolean> {
   return Number.isInteger(id) && Boolean(await knex("listeners").where("id", "=", id as number).first());
 }
@@ -776,11 +748,6 @@ app.delete("/api/rules/:id", async (req: Request, res: Response, next: NextFunct
   }
 });
 
-// Starts a Twitch OAuth authorization for a given listener: redirects the
-// browser to Twitch's consent screen, then Twitch redirects back to
-// /oauth/twitch/callback with a code we exchange for tokens. The listener
-// must already exist with a `clientId` (and `clientSecret`, needed at the
-// callback) in its options.
 app.get("/oauth/twitch/authorize", async (req: Request, res: Response) => {
   try {
     const listenerId = parseInt(req.query.listenerId as string);
@@ -819,7 +786,6 @@ app.get("/oauth/twitch/authorize", async (req: Request, res: Response) => {
   }
 });
 
-// Where Twitch redirects back to after the user grants (or denies) consent.
 app.get("/oauth/twitch/callback", async (req: Request, res: Response) => {
   try {
     const { code, state, error, error_description } = req.query as { [key: string]: string };
@@ -860,9 +826,6 @@ app.get("/oauth/twitch/callback", async (req: Request, res: Response) => {
       redirectUri: TWITCH_OAUTH_REDIRECT_URI
     });
 
-    // The tokens go into encrypted storage; only their expiry (not a
-    // secret, and what the listener schedules its refresh from) stays in
-    // the listener's options.
     saveSecrets("listener", row.id, fields, {
       accessToken: tokenResponse.access_token,
       refreshToken: tokenResponse.refresh_token
@@ -882,11 +845,6 @@ app.get("/oauth/twitch/callback", async (req: Request, res: Response) => {
       console.error('Error reloading listener after Twitch authorization:', pending.listenerId, err);
     }
 
-    // Relative, deliberately - resolves against whatever origin the browser
-    // is actually on. If TWITCH_OAUTH_REDIRECT_URI points at the Vite dev
-    // server (proxied through to this route), that's localhost:5173 and
-    // this lands back in the live app. In production, where this server
-    // also serves the built client, it's the same origin either way.
     res.redirect(`/listeners/${pending.listenerId}`);
   } catch (err: any) {
     console.error('Twitch OAuth callback error:', err?.response?.data || err);
@@ -900,9 +858,6 @@ function findManualListener(id: number): ManualListener | undefined {
   return listener instanceof ManualListener ? listener : undefined;
 }
 
-// The controller action trees a manual listener's remote control renders -
-// the successor to the old per-controller /api/obs/actions and
-// /api/atem/actions routes.
 app.get("/api/listeners/:id/actions", (req: Request, res: Response) => {
   const listener = findManualListener(parseInt(req.params.id));
 
@@ -916,10 +871,6 @@ app.get("/api/listeners/:id/actions", (req: Request, res: Response) => {
   })));
 });
 
-// Fires one controller action through a manual listener, bypassing rules.
-// `path` is sent as an array of segments (a scene name can itself contain a
-// dot), and only actions the controller currently advertises are accepted,
-// since OBS/ATEM dispatch by looking the action name up as a method.
 app.post("/api/listeners/:id/actions", (req: Request, res: Response) => {
   const listener = findManualListener(parseInt(req.params.id));
 
@@ -950,8 +901,6 @@ app.post("/api/listeners/:id/actions", (req: Request, res: Response) => {
   res.sendStatus(202);
 });
 
-// Fires a rule on demand - used by the remote control view against a
-// "manual" listener, whose rules have no external trigger of their own.
 app.post("/api/rules/:id/trigger", async (req: Request, res: Response, next: NextFunction) => {
   try {
     const id = parseInt(req.params.id);
@@ -980,9 +929,6 @@ app.get('/*', (req, res) => {
   res.sendFile(path.join(import.meta.dirname, '..', 'client', 'index.html'));
 });
 
-// Final safety net: an uncaught error in a route (via next(err)) gets turned
-// into a 500 response here instead of becoming an unhandled rejection that
-// takes down the whole process.
 app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
   console.error('Unhandled request error:', err);
   res.sendStatus(500);
@@ -995,20 +941,19 @@ const server = app.listen(PORT, () => {
     console.warn("THEBIT_ADMIN_PASSWORD is not set - the app and its API are open to anyone who can reach this port. Set it before exposing this server beyond a network you trust.");
 });
 
-// Live statuses for the pages that show them, behind the same admin session
-// as the rest of the API. Listed from the database, like the list routes, so
-// disabled controllers and listeners (which aren't loaded) are included.
 attachStatusFeed(
   server,
   async () => {
-    const [controllers, listeners] = await Promise.all([
+    const [controllers, listeners, states] = await Promise.all([
       knex("controllers").select("id", "active"),
-      knex("listeners").select("id", "active")
+      knex("listeners").select("id", "active"),
+      knex("controller_state").select("controller_id", "state")
     ]);
 
     return {
       controllers: Object.fromEntries(controllers.map((row) => [row.id, controllerStatus(row)])),
-      listeners: Object.fromEntries(listeners.map((row) => [row.id, listenerStatus(row)]))
+      listeners: Object.fromEntries(listeners.map((row) => [row.id, listenerStatus(row)])),
+      states: Object.fromEntries(states.map((row) => [row.controller_id, JSON.parse(row.state)]))
     };
   },
   (req) => isAuthenticated(req as Request)

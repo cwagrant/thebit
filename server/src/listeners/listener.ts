@@ -27,22 +27,14 @@ abstract class Listener implements IListener {
     this._vm = new ivm.Isolate({ memoryLimit: 64 });
   }
 
-  // The settings this kind of listener needs. Fields marked `secret` are
-  // stored encrypted and handed to the constructor as `secrets` rather than
-  // as part of `options`.
   static get fields(): SettingField[] {
     return [];
   }
 
-  // Kinds that connect to something define this: a one-off attempt to
-  // connect with the given (saved) settings, entirely separate from any
-  // running instance, reporting whether it worked and why not if it didn't.
   static testConnection?: (config: ListenerConfig) => Promise<ToolResult>;
 
   protected secret(key: string): string | undefined { return this._secrets[key]; }
 
-  // Replaces stored secrets from inside the listener itself (e.g. a
-  // refreshed access token), both in the secrets table and in memory.
   protected storeSecrets(changes: { [key: string]: string }): void {
     saveSecrets("listener", this.id, (this.constructor as typeof Listener).fields, changes);
     Object.assign(this._secrets, changes);
@@ -67,8 +59,6 @@ abstract class Listener implements IListener {
     };
   }
 
-  // Live connection state, surfaced on the listeners page. Listeners with
-  // nothing to connect to (e.g. manual) keep this default.
   get status(): ListenerStatus {
     return { state: this.active ? "running" : "disabled" };
   }
@@ -150,7 +140,6 @@ abstract class Listener implements IListener {
     return false;
   }
 
-  // Can make a test function in the browser to send messages here.
   callActions(actions: ListenerAction[]) {
     actions.forEach(async (listenerAction) => {
       try {

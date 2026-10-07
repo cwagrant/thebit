@@ -22,11 +22,8 @@ export default class Matrix {
   _controllers: Map<string, Controller> = new Map();
   _listeners: Map<string, Listener> = new Map();
   _available_listeners: Map<string, ListenerConstructor> = new Map();
-  // Why an enabled listener failed to start, by listener id - so the
-  // listeners page can say more than just "not running".
   _listener_errors: Map<number, string> = new Map();
   _available_controllers: Map<string, ControllerConstructor> = new Map();
-  // Why an enabled controller failed to start, by controller id.
   _controller_errors: Map<number, string> = new Map();
 
   get listeners() { return this._listeners; }
@@ -44,11 +41,6 @@ export default class Matrix {
     this.loadListeners();
   }
 
-  // Fully recreates the listener from its current DB row rather than
-  // restarting the existing instance in place, for the same reason as
-  // reloadController below. Disabled (active=0) rows are stopped and left
-  // uninstantiated rather than immediately reconstructed - a disabled
-  // listener should not hold a live connection or attempt to reconnect.
   async reloadListener(id: number): Promise<Listener | undefined> {
     const listener = this.listeners.values().find((listener) => listener.id === id);
 
@@ -68,8 +60,6 @@ export default class Matrix {
       throw new Error(`Listener ${id} not found`);
     }
 
-    // Before the active check, so a disabled listener's secrets still get
-    // moved out of plaintext.
     this.hydrateListener(row);
 
     if (!row.active) {
@@ -92,12 +82,6 @@ export default class Matrix {
     return newListener;
   }
 
-  // Like reloadListener above, fully recreates from the current DB row
-  // rather than restarting the existing instance in place, since a
-  // controller's options (e.g. an OBS address/password) are read once in
-  // its constructor. Disabled (active=0) rows are likewise torn down and
-  // left uninstantiated, so a disabled controller holds no connection and
-  // actions aimed at it go nowhere.
   async reloadController(id: number): Promise<Controller | undefined> {
     const controller = this.controllers.values().find((controller) => controller.id === id);
 
@@ -118,8 +102,6 @@ export default class Matrix {
       throw new Error(`Controller ${id} not found`);
     }
 
-    // Before the active check, so a disabled controller's secrets still get
-    // moved out of plaintext.
     this.hydrateController(row);
 
     this._controller_errors.delete(id);
@@ -200,8 +182,6 @@ export default class Matrix {
     return typeof this._available_listeners.get(kind)?.testConnection === "function";
   }
 
-  // Tries connecting with a listener's saved settings, without touching the
-  // running listener (if there is one - this works for disabled ones too).
   async testListener(id: number): Promise<ToolResult> {
     const row = await knex("listeners").where('id', id).first();
 
@@ -224,11 +204,6 @@ export default class Matrix {
     return this._available_listeners.get(kind)?.fields || [];
   }
 
-  // Turns a raw controllers/listeners row into what its class's constructor
-  // takes: parsed `options` plus decrypted `secrets`. Any secret field still
-  // sitting in plaintext in the row's options (rows from before the secrets
-  // table, the seeds in db.ts, or options edited by hand) is moved into the
-  // secrets table here and stripped from the row.
   private hydrate<Row extends IController | IListener>(owner: SecretOwner, fields: SettingField[], row: Row): Row {
     const parsed = typeof row.options === "string" ? JSON.parse(row.options) : row.options;
     const { options, secrets } = splitSecrets(fields, parsed);
@@ -236,8 +211,6 @@ export default class Matrix {
     if (JSON.stringify(options) !== JSON.stringify(parsed)) {
       saveSecrets(owner, row.id, fields, secrets);
       db.prepare(`UPDATE ${owner}s SET options = ? WHERE id = ?`).run(JSON.stringify(options), row.id);
-      // The plaintext would otherwise linger in the file's freed pages, and
-      // in the write-ahead log until it's next reset.
       db.exec("VACUUM");
       db.pragma("wal_checkpoint(TRUNCATE)");
       console.log(`Moved plaintext secrets for ${owner} '${row.name}' into encrypted storage.`);

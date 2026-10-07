@@ -1,20 +1,19 @@
 <script setup lang="ts">
   import { ref, onMounted, onUnmounted } from "vue";
-  import { STATUS_TAGS, type SettingField, type ControllerStatus, type SecretChanges } from '@/settings';
+  import { inviteApi, errorMessage } from '@/api';
+  import { type SettingField, type ControllerStatus, type SecretChanges } from '@/settings';
   import SettingFields from '@/components/SettingFields.vue';
+  import FormFooter from '@/components/FormFooter.vue';
+  import StatusTag from '@/components/StatusTag.vue';
+  import CopyButton from '@/components/CopyButton.vue';
+  import CopyField from '@/components/CopyField.vue';
 
-  // The page behind a controller's invite link: whoever holds the link can
-  // fill in that one controller's connection details here, and nothing else.
-  // Public - it authenticates with the token from the URL fragment instead
-  // of an admin session.
   type Invite = {
     controller: { name: string; kind: string };
     fields: SettingField[];
     options: Record<string, unknown>;
     secrets: Record<string, boolean>;
     status: ControllerStatus | null;
-    // Set when the server has a tunnel available for this controller: the
-    // ssh command that publishes the device, and the address it ends up at.
     tunnel: { field: string; url: string; command: string } | null;
     expiresAt: number;
   }
@@ -32,15 +31,8 @@
   const saved = ref(false);
   let pollTimer: ReturnType<typeof setTimeout> | undefined;
 
-  const request = (init: RequestInit = {}) => {
-    return fetch("/api/invite", {
-      ...init,
-      headers: { ...init.headers, "Authorization": `Bearer ${token}` }
-    });
-  };
+  const api = inviteApi(token);
 
-  // What's saved in the field the tunnel's address goes in, when that's a
-  // different address from the tunnel's.
   const otherSavedAddress = ref("");
 
   const applyInvite = (data: Invite, { resetForm, preferTunnel = false }: { resetForm: boolean, preferTunnel?: boolean }) => {
@@ -54,9 +46,6 @@
 
       otherSavedAddress.value = typeof saved === "string" && saved !== data.tunnel?.url ? saved : "";
 
-      // Arriving on the page, the tunnel's address is what goes in the box -
-      // it's what the command above sets up. After a save, the box keeps
-      // showing what was saved, tunnel or not.
       if (data.tunnel && (preferTunnel || !saved))
         useTunnel();
     }
@@ -69,22 +58,6 @@
       options.value[tunnel.field] = otherSavedAddress.value;
   };
 
-  const COPIED_LABEL_MS = 2000;
-
-  const copied = ref("");
-  let copiedTimer: ReturnType<typeof setTimeout> | undefined;
-
-  // The "Copied" label only shows briefly, so the button reads as ready
-  // again - it can be pressed as often as needed, e.g. after something else
-  // has since been copied.
-  const copy = async (what: string, text: string) => {
-    await navigator.clipboard.writeText(text);
-    copied.value = what;
-
-    clearTimeout(copiedTimer);
-    copiedTimer = setTimeout(() => { copied.value = ""; }, COPIED_LABEL_MS);
-  };
-
   const useTunnel = () => {
     const tunnel = invite.value?.tunnel;
 
@@ -94,17 +67,17 @@
 
   const fetchInvite = async () => {
     if (token) {
-      const response = await request();
+      try {
+        const { data } = await api.get<Invite>("/invite");
 
-      if (response.ok)
-        applyInvite(await response.json(), { resetForm: true, preferTunnel: true });
+        applyInvite(data, { resetForm: true, preferTunnel: true });
+      } catch {
+      }
     }
 
     loading.value = false;
   };
 
-  // After a save the controller reconnects with the new details - follow
-  // along until that settles one way or the other.
   const pollStatus = (attemptsLeft: number) => {
     clearTimeout(pollTimer);
 
@@ -112,10 +85,12 @@
       return;
 
     pollTimer = setTimeout(async () => {
-      const response = await request();
+      try {
+        const { data } = await api.get<Invite>("/invite");
 
-      if (response.ok)
-        applyInvite(await response.json(), { resetForm: false });
+        applyInvite(data, { resetForm: false });
+      } catch {
+      }
 
       pollStatus(attemptsLeft - 1);
     }, STATUS_POLL_INTERVAL_MS);
@@ -127,20 +102,13 @@
     saving.value = true;
 
     try {
-      const response = await request({
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ options: options.value, secrets: secrets.value })
-      });
+      const { data } = await api.put<Invite>("/invite", { options: options.value, secrets: secrets.value });
 
-      if (!response.ok) {
-        error.value = await response.text() || "Something went wrong saving your details.";
-        return;
-      }
-
-      applyInvite(await response.json(), { resetForm: true });
+      applyInvite(data, { resetForm: true });
       saved.value = true;
       pollStatus(STATUS_POLL_ATTEMPTS);
+    } catch (err) {
+      error.value = errorMessage(err, "Something went wrong saving your details.");
     } finally {
       saving.value = false;
     }
@@ -149,7 +117,6 @@
   onMounted(fetchInvite);
   onUnmounted(() => {
     clearTimeout(pollTimer);
-    clearTimeout(copiedTimer);
   });
 </script>
 
@@ -190,37 +157,20 @@
           {{ invite.controller.kind.toUpperCase() }}, run this command, and
           leave it running for as long as you want to stay connected:
         </p>
-        <div class="field has-addons">
-          <div class="control is-expanded">
-            <input
-              class="input is-family-monospace"
-              type="text"
-              readonly
-              :value="invite.tunnel.command"
-              @focus="($event.target as HTMLInputElement).select()"
-            >
-          </div>
-          <div class="control">
-            <button
-              class="button is-primary"
-              @click="copy('command', invite.tunnel.command)"
-            >
-              {{ copied === 'command' ? 'Copied' : 'Copy' }}
-            </button>
-          </div>
-        </div>
+        <CopyField
+          :value="invite.tunnel.command"
+          monospace
+        />
         <p class="block">
           The first time, it asks whether to trust the server - answer
           <code>yes</code>. Then it asks for a password: paste the one below
           (nothing shows up as you paste) and press Enter.
         </p>
         <div class="buttons">
-          <button
-            class="button"
-            @click="copy('password', token)"
-          >
-            {{ copied === 'password' ? 'Copied' : 'Copy tunnel password' }}
-          </button>
+          <CopyButton
+            :text="token"
+            label="Copy tunnel password"
+          />
           <button
             v-if="options[invite.tunnel.field] !== invite.tunnel.url"
             class="button"
@@ -243,18 +193,7 @@
         v-if="invite.status && invite.status.state !== 'unknown'"
         class="block"
       >
-        <span
-          class="tag"
-          :class="STATUS_TAGS[invite.status.state]"
-        >
-          {{ invite.status.state }}
-        </span>
-        <p
-          v-if="invite.status.error"
-          class="help is-danger"
-        >
-          {{ invite.status.error }}
-        </p>
+        <StatusTag :status="invite.status" />
       </div>
 
       <form
@@ -268,25 +207,12 @@
           :secrets-set="invite.secrets"
         />
 
-        <p
-          v-if="error"
-          class="help is-danger"
-        >
-          {{ error }}
-        </p>
-        <p
-          v-else-if="saved"
-          class="help is-success"
-        >
-          Saved - connecting with your new details.
-        </p>
-        <button
-          type="submit"
-          class="button mt-2 is-primary"
-          :class="{ 'is-loading': saving }"
-        >
-          Save
-        </button>
+        <FormFooter
+          :error="error"
+          :saved="saved"
+          :saving="saving"
+          saved-message="Saved - connecting with your new details."
+        />
       </form>
 
       <p class="help">

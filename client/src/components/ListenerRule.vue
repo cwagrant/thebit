@@ -10,6 +10,7 @@
 
   import { inject, ref } from 'vue';
   import { editorKey } from '@/editor';
+  import api from '@/api';
 
   const { toggleEditor, setContent, onContentUpdate, setLanguage} = inject(editorKey)!;
   const showModal = ref(false);
@@ -28,38 +29,25 @@
   const updateRule = () => {
     console.log("ruleprop", ruleProp.value)
     console.log('isNew', exists)
-    const url = exists.value ? `/api/rules/${ruleProp.value.id}` : "/api/rules";
+    const url = exists.value ? `/rules/${ruleProp.value.id}` : "/rules";
     const action = exists.value ? "PUT" : "POST";
 
-    fetch(url, {
-      method: action,
-      headers: {
-      "Content-Type": "application/json"
-      },
-      body: JSON.stringify(ruleProp.value)
-    }).then(async (response) => {
-      if(!response.ok) {
-        console.error("Failed to update rule");
-      } else {
-        const data = await response.json();
-        ruleProp.value = data
-        console.log('updated', ruleProp.value);
-        emit('rule:updated', ruleProp.value);
-        toggleModal();
-      }
+    api.request({ url, method: action, data: ruleProp.value }).then(({ data }) => {
+      ruleProp.value = data
+      console.log('updated', ruleProp.value);
+      emit('rule:updated', ruleProp.value);
+      toggleModal();
+    }).catch(() => {
+      console.error("Failed to update rule");
     })
   }
 
   const deleteRule = () => {
-  fetch(`/api/rules/${ruleProp.value.id}`, {
-    method: "DELETE"
-  }).then(async (response) => {
-    if(!response.ok) {
-      console.error("Failed to delete rule");
-    } else {
-      console.log('deleted');
-      emit('rule:deleted', ruleProp.value.id);
-    }
+  api.delete(`/rules/${ruleProp.value.id}`).then(() => {
+    console.log('deleted');
+    emit('rule:deleted', ruleProp.value.id);
+  }).catch(() => {
+    console.error("Failed to delete rule");
   })
   }
 

@@ -56,8 +56,6 @@ class WSListener extends Listener {
     if (!this.active)
       return { state: "disabled" };
 
-    // Client reconnects on its own after a drop, so anything short of open
-    // means it's still trying.
     return { state: this.socket.ws.readyState === WebSocket.OPEN ? "connected" : "connecting" };
   }
 

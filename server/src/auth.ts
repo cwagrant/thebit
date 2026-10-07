@@ -2,12 +2,6 @@ import crypto from "node:crypto";
 import { Request, Response, NextFunction } from "express";
 import { deriveKey } from "./secrets.js";
 
-// Optional admin login. With THEBIT_ADMIN_PASSWORD set, everything under
-// /api needs a session cookie (apart from the routes index.ts mounts ahead
-// of requireAdmin - logging in, and the invite page's own endpoints).
-// Without it the app stays open, as it always was - fine on a trusted LAN,
-// not something to put behind a public tunnel.
-
 const SESSION_COOKIE = "thebit_session";
 const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const FAILED_LOGIN_DELAY_MS = 1000;
@@ -24,7 +18,6 @@ function digest(value: string): Buffer {
   return crypto.createHash("sha256").update(value).digest();
 }
 
-// Salted with the password, so changing it signs everyone out.
 function sign(payload: string): string {
   const key = deriveKey("session-cookie", digest(adminPassword() || "").toString("hex"));
 
@@ -61,7 +54,6 @@ export function isAuthenticated(req: Request): boolean {
 }
 
 function sessionCookie(req: Request, value: string, maxAgeMs: number): string {
-  // Behind a TLS-terminating tunnel/proxy the request itself arrives as http.
   const secure = req.secure || req.headers["x-forwarded-proto"] === "https";
 
   return `${SESSION_COOKIE}=${value}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${Math.floor(maxAgeMs / 1000)}${secure ? "; Secure" : ""}`;
@@ -75,8 +67,6 @@ export async function login(req: Request, res: Response): Promise<boolean> {
     return true;
 
   if (!crypto.timingSafeEqual(digest(expected), digest(given))) {
-    // Flat delay on every wrong guess - crude, but enough to make guessing
-    // a decent password over the network impractical.
     await new Promise((resolve) => setTimeout(resolve, FAILED_LOGIN_DELAY_MS));
     return false;
   }

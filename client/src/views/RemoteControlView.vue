@@ -1,6 +1,7 @@
 <script setup lang="ts">
   import { ref, onMounted, provide } from "vue";
   import { useRoute } from 'vue-router';
+  import api, { errorMessage } from '@/api';
   import ActionsView from '@/components/ActionsView.vue';
   import { sendActionKey, type Actions, type ActionRequest } from '@/action';
 
@@ -28,8 +29,6 @@
     message: string;
   }
 
-  // Successes clear themselves quickly; failures stay up longer since
-  // they're the ones worth actually reading.
   const TOAST_DURATION_MS = { ok: 3000, error: 8000 };
 
   const toasts = ref<Toast[]>([]);
@@ -49,9 +48,8 @@
   const fetchRules = () => {
     const { id } = route.params;
 
-    fetch(`/api/listeners/${id}/rules`)
-      .then((response) => response.json())
-      .then((data: Rule[]) => {
+    api.get<Rule[]>(`/listeners/${id}/rules`)
+      .then(({ data }) => {
         rules.value = data.filter((rule) => rule.active === 1);
       });
   }
@@ -59,27 +57,24 @@
   const fetchActions = () => {
     const { id } = route.params;
 
-    fetch(`/api/listeners/${id}/actions`)
-      .then(async (response) => {
-        if (!response.ok) {
-          showToast(false, `Couldn't load controller actions: ${await response.text()}`);
-          return;
-        }
-
-        controllers.value = await response.json();
+    api.get<ControllerActions[]>(`/listeners/${id}/actions`)
+      .then(({ data }) => {
+        controllers.value = data;
+      })
+      .catch((err) => {
+        showToast(false, `Couldn't load controller actions: ${errorMessage(err, "")}`);
       });
   }
 
   const trigger = (rule: Rule) => {
     triggeringId.value = rule.id;
 
-    fetch(`/api/rules/${rule.id}/trigger`, { method: "POST" })
-      .then(async (response) => {
-        if (response.ok) {
-          showToast(true, `Triggered ${rule.message}`);
-        } else {
-          showToast(false, `${rule.message} failed: ${await response.text()}`);
-        }
+    api.post(`/rules/${rule.id}/trigger`)
+      .then(() => {
+        showToast(true, `Triggered ${rule.message}`);
+      })
+      .catch((err) => {
+        showToast(false, `${rule.message} failed: ${errorMessage(err, "")}`);
       })
       .finally(() => {
         triggeringId.value = null;
@@ -90,18 +85,11 @@
     const { id } = route.params;
     const label = [request.controller, ...request.path, request.action].join(" > ");
 
-    const response = await fetch(`/api/listeners/${id}/actions`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify(request)
-    });
-
-    if (response.ok) {
+    try {
+      await api.post(`/listeners/${id}/actions`, request);
       showToast(true, `Sent ${label}`);
-    } else {
-      showToast(false, `${label} failed: ${await response.text()}`);
+    } catch (err) {
+      showToast(false, `${label} failed: ${errorMessage(err, "")}`);
     }
   }
 

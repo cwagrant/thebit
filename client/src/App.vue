@@ -4,6 +4,7 @@ import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router'
 import 'bulma/css/bulma.min.css'
 import EditorView from '@/components/EditorView.vue'
 import { editorKey, type Editor } from '@/editor'
+import api from '@/api'
 import { authRequiredKey, controllerFieldsKey, listenerFieldsKey, type SettingField } from '@/settings'
 
 const editorContent = ref("");
@@ -45,30 +46,27 @@ const listenerKinds = ref<string[]>([]);
 const controllerKinds = ref<string[]>([]);
 
 const fetchListenerKinds = async () => {
-  const response = await fetch("/api/listeners/available")
-  const data = await response.json();
-  console.log(data);
+  const { data } = await api.get<string[]>("/listeners/available");
   listenerKinds.value = data;
 }
 
 const fetchControllerKinds = async () => {
-  const response = await fetch("/api/controllers/available")
-  const data = await response.json();
+  const { data } = await api.get<string[]>("/controllers/available");
   controllerKinds.value = data;
 }
 
 const controllerFields = ref<Record<string, SettingField[]>>({});
 
 const fetchControllerFields = async () => {
-  const response = await fetch("/api/controllers/fields")
-  controllerFields.value = await response.json();
+  const { data } = await api.get<Record<string, SettingField[]>>("/controllers/fields");
+  controllerFields.value = data;
 }
 
 const listenerFields = ref<Record<string, SettingField[]>>({});
 
 const fetchListenerFields = async () => {
-  const response = await fetch("/api/listeners/fields")
-  listenerFields.value = await response.json();
+  const { data } = await api.get<Record<string, SettingField[]>>("/listeners/fields");
+  listenerFields.value = data;
 }
 
 const fetchKinds = () => {
@@ -78,9 +76,6 @@ const fetchKinds = () => {
   fetchListenerFields();
 }
 
-// Admin login, when the server has THEBIT_ADMIN_PASSWORD set. Routes marked
-// `public` (the invite page) are shown without one - they never touch the
-// admin API.
 const route = useRoute();
 const router = useRouter();
 const sessionChecked = ref(false);
@@ -92,8 +87,7 @@ const loginError = ref("");
 const isPublicRoute = computed(() => route.meta.public === true);
 
 const fetchSession = async () => {
-  const response = await fetch("/api/session");
-  const session = await response.json();
+  const { data: session } = await api.get<{ authRequired: boolean, authenticated: boolean }>("/session");
 
   authRequired.value = session.authRequired;
   authenticated.value = session.authenticated;
@@ -106,29 +100,24 @@ const fetchSession = async () => {
 const login = async () => {
   loginError.value = "";
 
-  const response = await fetch("/api/session", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ password: password.value })
-  });
-
-  password.value = "";
-
-  if (!response.ok) {
+  try {
+    await api.post("/session", { password: password.value });
+  } catch {
     loginError.value = "Wrong password.";
     return;
+  } finally {
+    password.value = "";
   }
 
   await fetchSession();
 }
 
 const logout = async () => {
-  await fetch("/api/session", { method: "DELETE" });
+  await api.delete("/session");
   authenticated.value = false;
 }
 
 onMounted(async () => {
-  // route.meta isn't populated until the initial navigation resolves.
   await router.isReady();
 
   if (!isPublicRoute.value)

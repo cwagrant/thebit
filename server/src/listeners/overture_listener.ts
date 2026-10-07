@@ -6,32 +6,12 @@ import { probeWebSocket } from "./connection_test.js";
 
 const DEFAULT_AUTH_ENDPOINT = "https://overture.overproduced.live/api/broadcasting/auth";
 const DEFAULT_PORT = 443;
-// Used until the server says otherwise in pusher:connection_established.
 const DEFAULT_ACTIVITY_TIMEOUT_SECONDS = 30;
-// How long the server gets to answer a ping before the connection is
-// considered dead.
 const PONG_TIMEOUT_MS = 10 * 1000;
-// Reconnect backoff: 1s, 2s, 4s, ... capped here.
 const RECONNECT_MAX_DELAY_MS = 30 * 1000;
 const HANDSHAKE_TIMEOUT_MS = 10 * 1000;
-// High-frequency clock-sync noise - still delivered to a rule that asks for
-// it by name, just not worth a log line each time.
 const QUIET_EVENTS = new Set(["TimerSync"]);
 
-// Listens to a campaign's events from Overture, which broadcasts them
-// through a Laravel Reverb server. Reverb speaks the Pusher protocol - a
-// JSON envelope of {event, channel, data} over a WebSocket - which is simple
-// enough to talk directly rather than through laravel-echo/pusher-js, the
-// way the op-connector NodeCG bundle this is modelled on does. That keeps
-// the socket, its reconnects and its status in this class, like
-// TwitchEventSubListener.
-//
-// Flow: connect -> "pusher:connection_established" gives us a socket_id ->
-// the campaign's channel is private, so Overture's auth endpoint signs that
-// socket_id for the channel (given our API token) -> "pusher:subscribe" with
-// that signature -> events arrive named after their PHP class, e.g.
-// "App\Broadcasting\Events\DonationReceived". A rule's message is matched
-// against the last part of that name ("DonationReceived").
 class OvertureListener extends Listener {
   private _ws?: WebSocket;
   private _stopped: boolean = false;
@@ -112,8 +92,6 @@ class OvertureListener extends Listener {
   }
 
   stop(): void {
-    // Set first - connect() and the "close" handler both check it, so
-    // nothing below can lead to a new connection attempt.
     this._stopped = true;
 
     clearTimeout(this._reconnectTimer);
@@ -122,10 +100,6 @@ class OvertureListener extends Listener {
     this.discardSocket();
   }
 
-  // Closes the current socket for good, without any of its events reaching
-  // this listener again. The no-op error handler matters: closing a socket
-  // that hasn't finished connecting makes ws emit an "error" for it, and an
-  // "error" nobody is listening for takes the whole process down.
   private discardSocket(): void {
     const socket = this._ws;
 
@@ -147,8 +121,6 @@ class OvertureListener extends Listener {
     if (this._subscribed && this._ws?.readyState === WebSocket.OPEN)
       return { state: "connected" };
 
-    // An open socket that isn't subscribed has either not got that far yet,
-    // or been refused the channel - _lastError says which.
     if (this._ws || this._reconnectTimer)
       return { state: "connecting", error: this._lastError };
 
@@ -156,13 +128,8 @@ class OvertureListener extends Listener {
   }
 
   parseRules(): void {
-    // Nothing to set up ahead of time: every event on the campaign channel
-    // arrives regardless, and is matched against the rules as it does (see
-    // handleEvent).
   }
 
-  // The campaign's channel is private, which the protocol marks with a
-  // "private-" prefix on the channel name everywhere it appears.
   private static channelFor(options: any): string {
     return `private-campaign.${options.campaignId}`;
   }
@@ -180,9 +147,6 @@ class OvertureListener extends Listener {
     return `${insecure ? "ws" : "wss"}://${hostname}:${port}/app/${encodeURIComponent(options.reverbKey)}?protocol=7&client=thebit&version=1.0`;
   }
 
-  // Gets Overture to vouch for a socket on the campaign's private channel.
-  // Resolves to the "pusher:subscribe" payload that carries its signature,
-  // or throws an Error whose message says what went wrong.
   private static async authorize(options: any, apiToken: string | undefined, socketId: string): Promise<object> {
     const channel = OvertureListener.channelFor(options);
 
@@ -212,8 +176,6 @@ class OvertureListener extends Listener {
     }
   }
 
-  // Goes as far as a running listener has to before events can arrive:
-  // connect, get authorized for the campaign's channel, and subscribe to it.
   static testConnection = async (config: ListenerConfig): Promise<ToolResult> => {
     const options = config.options as any;
 
@@ -300,7 +262,6 @@ class OvertureListener extends Listener {
     if (this._stopped || socket !== this._ws)
       return;
 
-    // Anything arriving counts as the connection being alive.
     this.resetActivityTimer(socket);
 
     let message: any;
@@ -338,8 +299,6 @@ class OvertureListener extends Listener {
     }
   }
 
-  // The Pusher protocol sends an event's data as a JSON string inside the
-  // JSON envelope.
   private static parseData(data: unknown): any {
     if (typeof data !== "string")
       return data;
@@ -371,8 +330,6 @@ class OvertureListener extends Listener {
       this._lastError = err.message;
       console.error(`Overture listener '${this.name}':`, this._lastError);
 
-      // Dropping the socket runs the normal reconnect-with-backoff path,
-      // which is also the retry for a failed authorization.
       socket.close();
     }
   }
@@ -383,8 +340,6 @@ class OvertureListener extends Listener {
     this._lastError = data?.message || `Reverb error ${code}`;
     console.error(`Overture listener '${this.name}' error from Reverb:`, data);
 
-    // 4000-4099 mean reconnecting as we are can't work (e.g. an unknown app
-    // key) - leave the error showing rather than hammering the server.
     if (code >= 4000 && code < 4100) {
       this._stopped = true;
       this.clearActivityTimers();
@@ -393,7 +348,6 @@ class OvertureListener extends Listener {
   }
 
   private handleEvent(eventName: string, event: any): void {
-    // "App\Broadcasting\Events\DonationReceived" -> "DonationReceived"
     const shortName = eventName.replace(/^.*\\/, "");
 
     if (shortName.startsWith("pusher"))
@@ -417,9 +371,6 @@ class OvertureListener extends Listener {
     }
   }
 
-  // The protocol expects whichever side has heard nothing for
-  // activity_timeout seconds to ping, and to give up on the connection if
-  // that goes unanswered.
   private resetActivityTimer(socket: WebSocket): void {
     this.clearActivityTimers();
 

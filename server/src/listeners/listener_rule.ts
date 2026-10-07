@@ -23,7 +23,6 @@ export class ListenerRule implements IListenerRule {
     this._condition = ListenerRule.parseCondition(condition);
 
     this._rule = this._script;
-    // this._rule = this.listener.vm.compileScriptSync(this._script);
   }
 
   private static parseCondition(condition: IListenerRule['condition']): { [key: string]: any } {
